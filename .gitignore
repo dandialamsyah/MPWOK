@@ -1,0 +1,18 @@
+# Google Credentials (VERY IMPORTANT)
+credentials.json
+
+# Local environment and token files
+token-tele.txt
+Gemini-API.txt
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and virtual environment folders
+.vscode/
+.idea/
+myenv/
+venv/
+.env
