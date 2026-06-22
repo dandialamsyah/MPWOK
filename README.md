@@ -13,13 +13,11 @@ Bot Telegram ini dirancang khusus untuk memantau status gangguan (Open & Closed)
      1. **MANJA**
      2. **REGULER**
      3. **HVC_GOLD**
-   * Dikirim otomatis ke grup koordinasi setiap **1 jam sekali** pada jam kerja (08:00 - 00:00).
 
 2. **Pengingat Tiket Open (`/cek_open`)**:
    * Mendeteksi tiket gangguan berstatus Open/Pending.
    * Menggunakan **Gemini AI (Google GenAI SDK)** untuk membuat draf pesan pengingat penyelesaian tiket secara santai namun tegas.
    * Mengelompokkan tiket open per teknisi, mengurutkannya berdasarkan prioritas jenis customer, dan mentag (@mention) username Telegram teknisi yang bersangkutan secara otomatis.
-   * Berjalan otomatis setiap **30 menit sekali** (08:00 - 00:00). Jika tidak ada antrean tiket open, bot tidak akan mengirim pesan apa pun agar tidak mengganggu grup.
 
 3. **Struktur Fleksibel & Cerdas (Dynamic Headers & Name Resolution)**:
    * **Pencarian Kolom Dinamis**: Bot secara otomatis mendeteksi kolom meskipun letaknya bergeser. Mendukung header kolom seperti `STATUS`/`STATE`, `TEAM`/`TEKNISI`/`PETUGAS`, `INCIDENT`/`WONUM`/`TICKET ID`, `DEVICE NAME`/`ALPRO`/`ODP`, serta `CUSTOMER TYPE`/`PRIORITAS`.

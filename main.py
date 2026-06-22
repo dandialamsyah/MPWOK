@@ -1,5 +1,3 @@
-import time
-import threading
 import logging
 # pyrefly: ignore [missing-import]
 import telebot
@@ -44,28 +42,7 @@ def get_main_menu_keyboard():
     markup.row(telebot.types.InlineKeyboardButton("🆔 Cek ID Chat", callback_data="btn_id"))
     return markup
 
-# ==================== WORKERS BACKGROUND ====================
 
-def auto_report_worker():
-    last_rekap, last_actcomp = 0, 0
-    while True:
-        try:
-            now = time.time()
-            if 8 <= time.localtime().tm_hour < 24:
-                # Hanya mengirim laporan otomatis jika GROUP_ID ditentukan di .env
-                if GROUP_ID:
-                    if now - last_rekap > 3600:
-                        bot.send_message(GROUP_ID, fetch_rekap_data(), parse_mode="MarkdownV2")
-                        last_rekap = now
-                    if now - last_actcomp > 1800:
-                        open_msg = fetch_open_tickets_alert(client, MODEL_ID)
-                        if "Semua tiket gangguan sudah CLOSED" not in open_msg:
-                            bot.send_message(GROUP_ID, open_msg, parse_mode="MarkdownV2")
-                        last_actcomp = now
-            time.sleep(60)
-        except Exception as e:
-            logging.error(f"Worker Report Error: {e}")
-            time.sleep(60)
 
 # ==================== COMMAND HANDLERS ====================
 
@@ -129,9 +106,6 @@ def handle_callback_queries(call):
 
 if __name__ == "__main__":
     logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
-    
-    # Jalankan worker background di thread terpisah
-    threading.Thread(target=auto_report_worker, daemon=True).start()
     
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
