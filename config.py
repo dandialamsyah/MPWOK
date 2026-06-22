@@ -51,56 +51,27 @@ else:
     GROUP_ID = None
 
 # ==================== KATEGORI STATUS ====================
-KATEGORI_TERPASANG = [
-    'REVOKE', 'LIMITASI ONU', 'REVOKE MIA', 'SURVEY MIA', 'ACTCOMP', 
-    'OKE TARIK', 'COMPLETE PS', 'LANJUT LENSA', 'VALCOMP', 'PROSES PELURUSAN', 
-    'VALINS ULANG', 'INPUL', 'TARIKAN > JAM 18', 'LANJUT MYTECH', 
-    'OK TARIK KENDALA KARTU', 'ONT TDK DETEK', 'ASSIGN ULANG'
-]
+KATEGORI_CLOSED = ['CLOSE', 'CLOSED']
+# Jika ada status selain closed, akan dikategorikan sebagai OPEN secara fallback.
+KATEGORI_OPEN = ['OPEN', 'TANAM UBI']
 
-KATEGORI_KENDALA_PELANGGAN = [
-    'BATAL', 'ATK', 'INDIKASI CABUT PASANG', 'DOUBLE INPUT', 'GANTI PAKET', 
-    'RUMAH KOSONG', 'BEDA SEGMENT', 'PENDING PELANGGAN', 'KENDALA MATERIAL/NTE', 
-    'PENDING HI', 'KENDALA HOMEPASS'
-]
-
-KATEGORI_KENDALA_TEKNIS = [
-    'TANAM TIANG', 'ODP FULL', 'ODP JAUH', 'KENDALA JALUR/RUTE TARIKAN', 
-    'ODP LOSS', 'ODP RETI', 'SALAH TAGGING', 'CROSSING JALAN', 'NO ODP', 
-    'REVOKE DONE', 'ODP RUSAK'
-]
-
-# ==================== MAPPING TEKNISI ====================
+# ==================== MAPPING TEKNISI ASSURANCE MEMPAWAH ====================
 TECH_TEAMS = [
-    {"names": ["AKMAL AZAMI", "ANDRE"], "tags": "@Guruku_Sayang @Wiwok_wowok"},
-    {"names": ["YOGI RINALDI", "REJA"], "tags": "@Yogirinaldi @rjaaanihhh"},
-    {"names": ["ANDRYANSYAH SAPUTRA", "RATNO"], "tags": "@Andryansyahsaputra @Ratno_Aje"},
-    {"names": ["ARI FITRIANSYAH", "SYEKHUL AKHYAR"], "tags": "@Ari_fitriansyah29 @Syekhulakhyar"},
-    {"names": ["ARJULI", "REVALDO"], "tags": "@arjuli @rvllldoo"},
-    {"names": ["JIMIANSYAH"], "tags": "@Jimiansyah"},
-    {"names": ["FERRY SEPTIAN"], "tags": "@Pericay"},
-    {"names": ["RONALDO APRILINI"], "tags": "@Ronalduhh"},
-    {"names": ["FIRDAN IRAWAN", "HADO MUANTO"], "tags": "@Firdanirawn @Budak_Gang"},
-    {"names": ["NURDIN ISMAIL", "MUHAMMAD HIDAYAT"], "tags": "@nurdin_1919 @Hidayat_SKY"},
-    {"names": ["SUGIANTO", "ALDIANSYAH"], "tags": "@SihoooJS50 @aldinsh"},
-    {"names": ["DIKY FEBRIANSAH"], "tags": "@Dikyfebriansah46"},
-    {"names": ["ABIL", "APIS"], "tags": "@abillll11 @Hafidz_ang"},
+    {"names": ["ADE-ANDRE", "ADE", "ANDRE"], "tags": "@ade_faisal12 @AndreKurniawan06"},
+    {"names": ["ASEP-RONI", "ASEP", "RONI"], "tags": "@Asep_oriyanto96 @Merona_merah"},
+    {"names": ["CHAIRUL-YUDA", "CHAIRUL", "YUDA"], "tags": "@ChairulGunawan @yuda1234567890"},
+    {"names": ["DEDI"], "tags": "@Dandelion_dedy"},
+    {"names": ["DESTA-JEFRI", "DESTA", "JEFRI"], "tags": "@Desta_9 @makenioranggg"},
+    {"names": ["YOGI"], "tags": "@yoimkumiss"},
 ]
 
 TEAM_LIST = [
-    "AKMAL AZAMI - ANDRE",
-    "YOGI RINALDI - REJA",
-    "ANDRYANSYAH SAPUTRA - RATNO",
-    "ARI FITRIANSYAH - SYEKHUL AKHYAR",
-    "ARJULI - REVALDO",
-    "JIMIANSYAH - SOLO",
-    "FERRY SEPTIAN - SOLO",
-    "RONALDO APRILINI - SOLO",
-    "FIRDAN IRAWAN - HADO MUANTO",
-    "NURDIN ISMAIL - MUHAMMAD HIDAYAT",
-    "SUGIANTO - ALDIANSYAH",
-    "DIKY FEBRIANSAH",
-    "ABIL - APIS"
+    "ADE-ANDRE",
+    "ASEP-RONI",
+    "CHAIRUL-YUDA",
+    "DEDI",
+    "DESTA-JEFRI",
+    "YOGI"
 ]
 
 TEKNISI_LIBUR = []

@@ -9,9 +9,8 @@ from telebot.formatting import escape_markdown
 
 from config import (
     SHEET_NAME,
-    KATEGORI_TERPASANG,
-    KATEGORI_KENDALA_PELANGGAN,
-    KATEGORI_KENDALA_TEKNIS,
+    KATEGORI_CLOSED,
+    KATEGORI_OPEN,
     TECH_TEAMS,
     TEAM_LIST,
     TEKNISI_LIBUR
@@ -38,7 +37,6 @@ except Exception as e:
 def escape_md(text):
     if not text:
         return ""
-    # Menggunakan utility dari pyTelegramBotAPI untuk pembersihan karakter MarkdownV2 yang lebih andal
     return escape_markdown(str(text))
 
 def get_team_tags(name_in_sheet):
@@ -63,103 +61,103 @@ def resolve_canonical_team(name_in_sheet):
 def get_short_name(full_name):
     name = str(full_name).upper()
     mapping = {
-        "AKMAL": "Akml-Andre", "YOGI": "Yogi-Reja", "ANDRYANSYAH": "Andry-Rtno",
-        "ARI FITRI": "Ari-Syekhl", "ARJULI": "Arjuli", "JIMIANSYAH": "Jimi",
-        "FERRY": "Ferry", "RONALDO": "Ronaldo", "FIRDAN": "Firdan-Hdo",
-        "NURDIN": "Nurd-Hdyat", "SUGIANTO": "Sigo-Aldi", "DIKY": "Diky-Dodi", "ABIL":"Abil-Apis"
+        "ADE": "Ade-Andre", "ASEP": "Asep-Roni", "CHAIRUL": "Chrl-Yuda",
+        "DEDI": "Dedi", "DESTA": "Dst-Jefri", "YOGI": "Yogi"
     }
     for key, val in mapping.items():
         if key in name: return val
     return name[:10]
 
-def get_target_tech_by_odp(odp_string):
-    odp = str(odp_string).upper().strip()
-    if "ODP-PMK-F" in odp: return "FIRDAN IRAWAN - HADO MUANTO"
-    if any(x in odp for x in ["ODP-TBA-F", "ODP-SMB-FS"]): return "SUGIANTO - ALDIANSYAH"
-    if "ODP-SMB-F" in odp: return "NURDIN ISMAIL - MUHAMMAD HIDAYAT"
-    if any(x in odp for x in ["ODP-BKY-FD", "ODP-BKY-FE", "ODP-BKY-FF", "ODP-BKY-FG"]): return "DIKY FEBRIANSAH"
-    if "ODP-BKY-F" in odp: return "YOGI RINALDI - REJA"
-    return None
+def resolve_headers(header):
+    idx_status = -1
+    for s_col in ['STATUS', 'STATE']:
+        if s_col in header:
+            idx_status = header.index(s_col)
+            break
+            
+    idx_team = -1
+    for t_col in ['TEAM', 'TEKNISI', 'PETUGAS']:
+        if t_col in header:
+            idx_team = header.index(t_col)
+            break
+            
+    idx_incident = -1
+    for i_col in ['INCIDENT', 'WONUM', 'TICKET ID', 'NO TIKET']:
+        if i_col in header:
+            idx_incident = header.index(i_col)
+            break
+            
+    idx_device = -1
+    for d_col in ['DEVICE NAME', 'ALPRO', 'ODP']:
+        if d_col in header:
+            idx_device = header.index(d_col)
+            break
+            
+    idx_cust_type = -1
+    for c_col in ['CUSTOMER TYPE', 'TIPE PELANGGAN', 'PRIORITAS', 'CLASS']:
+        if c_col in header:
+            idx_cust_type = header.index(c_col)
+            break
+            
+    return idx_status, idx_team, idx_incident, idx_device, idx_cust_type
 
-def perform_auto_assign():
-    if not ws_wo: return
-    try:
-        rows = ws_wo.get_all_values()
-        if not rows or len(rows) < 2: return
-        header = [str(h).upper().strip() for h in rows[0]]
-        
-        idx_tech = header.index('TEKNISI')
-        idx_status = header.index('STATUS')
-        idx_alpro = header.index('ALPRO')
-        idx_wonum = header.index('WONUM')
-        
-        available_teams = [t for t in TEAM_LIST if t not in TEKNISI_LIBUR]
-        load_count = {name: 0 for name in available_teams}
-        
-        unassigned_indices = []
-        for i, row in enumerate(rows[1:], start=2):
-            if len(row) <= idx_wonum or not str(row[idx_wonum]).strip():
-                continue
-            tech = str(row[idx_tech]).strip()
-            status = str(row[idx_status]).upper().strip()
-            if not tech or any(x in tech.upper() for x in ["UNASSIGNED", "BLM ASSIGN"]):
-                unassigned_indices.append((i, row))
-            else:
-                canonical_tech = resolve_canonical_team(tech)
-                if canonical_tech in load_count and status not in ['PS', 'COMPLETE PS']:
-                    load_count[canonical_tech] += 1
+def get_priority_rank(cust_type):
+    ct = str(cust_type).upper().strip()
+    if 'MANJA' in ct:
+        return 1
+    elif 'REGULER' in ct:
+        return 2
+    elif 'HVC' in ct or 'GOLD' in ct:
+        return 3
+    else:
+        return 4
 
-        if not unassigned_indices: return
-
-        cells_to_update = []
-        for row_idx, row in unassigned_indices:
-            target_tech = get_target_tech_by_odp(row[idx_alpro])
-            if not target_tech or target_tech in TEKNISI_LIBUR:
-                # Load balancing
-                restricted = ["FIRDAN IRAWAN - HADO MUANTO", "SUGIANTO - ALDIANSYAH", "NURDIN ISMAIL - MUHAMMAD HIDAYAT", "DIKY FEBRIANSAH", "YOGI RINALDI - REJA"]
-                flex_teams = {k: v for k, v in load_count.items() if k not in restricted}
-                target_tech = min(flex_teams, key=flex_teams.get) if flex_teams else min(load_count, key=load_count.get) if load_count else None
-
-            if target_tech:
-                cells_to_update.append(Cell(row=row_idx, col=idx_tech + 1, value=target_tech))
-                load_count[target_tech] += 1
-        
-        if cells_to_update:
-            ws_wo.update_cells(cells_to_update)
-            logging.info(f"Auto-assign {len(cells_to_update)} WO.")
-    except Exception as e:
-        logging.error(f"Error Auto Assign: {e}")
-
-def fetch_actcomp_data(client=None, model_id=None):
+def fetch_open_tickets_alert(client=None, model_id=None):
     if not ws_wo: return r"❌ Google Sheet tidak terhubung\."
     try:
         rows = ws_wo.get_all_values()
-        header = [str(h).upper().strip() for h in rows[0]]
-        idx_wonum, idx_status, idx_tech = header.index('WONUM'), header.index('STATUS'), header.index('TEKNISI')
-        idx_ket = header.index('KETERANGAN') if 'KETERANGAN' in header else -1
+        if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
+        header = [str(h).upper().strip() for h in rows[0]]
+        idx_status, idx_team, idx_incident, idx_device, idx_cust_type = resolve_headers(header)
+        
+        if idx_status == -1 or idx_team == -1 or idx_incident == -1:
+            return r"❌ Struktur kolom Sheet tidak sesuai\. Pastikan terdapat kolom STATUS, TEAM/TEKNISI, dan INCIDENT/WONUM\."
+            
         alerts = {}
         for row in rows[1:]:
-            if len(row) <= max(idx_wonum, idx_status, idx_tech) or not str(row[idx_wonum]).strip():
+            if len(row) <= max(idx_status, idx_team, idx_incident):
                 continue
-            status = str(row[idx_status]).upper().strip()
-            if 'ACTCOMP' in status:
-                tech = str(row[idx_tech]).strip()
-                tags = get_team_tags(tech)
+            incident = str(row[idx_incident]).strip()
+            if not incident:
+                continue
+            status_raw = str(row[idx_status]).upper().strip()
+            team_raw = str(row[idx_team]).strip()
+            
+            # Jika status tidak closed
+            if not any(x in status_raw for x in KATEGORI_CLOSED):
+                tags = get_team_tags(team_raw)
                 if not tags: continue
-                ket_val = row[idx_ket] if idx_ket != -1 and len(row) > idx_ket else ""
-                info = f"▫️ `{escape_md(row[idx_wonum])}` \\[{escape_md(status)}\\] {escape_md(ket_val) if ket_val else '_blm BAI_'}"
+                
+                device_val = row[idx_device] if idx_device != -1 and len(row) > idx_device else ""
+                cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
+                
                 if tags not in alerts: alerts[tags] = []
-                alerts[tags].append(info)
+                alerts[tags].append({
+                    'incident': incident,
+                    'status': status_raw,
+                    'device': device_val,
+                    'cust_type': cust_type
+                })
+                
+        if not alerts: return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
         
-        if not alerts: return "✅ *Semua status ACTCOMP sudah beres\\!*"
-        
-        ai_msg = "Ayo teman\\-teman, jangan lupa segera lengkapi BAI\\-nya ya\\!"
+        ai_msg = "Ayo teman\\-teman, segera selesaikan tiket gangguan yang masih open ya\\!"
         if client and model_id:
             try:
                 res = client.models.generate_content(
                     model=model_id, 
-                    contents="Berikan satu kalimat singkat, santai namun tetap tegas dalam bahasa Indonesia untuk menagih berkas BAI ke teknisi lapangan. Maksimal 15 kata. Tanpa markdown."
+                    contents="Berikan satu kalimat singkat, santai namun tetap tegas dalam bahasa Indonesia untuk mengingatkan teknisi agar segera menyelesaikan tiket gangguan (trouble ticket) yang masih OPEN. Maksimal 15 kata. Tanpa markdown."
                 )
                 ai_msg = escape_md(res.candidates[0].content.parts[0].text.strip())
             except Exception as e:
@@ -167,82 +165,123 @@ def fetch_actcomp_data(client=None, model_id=None):
                 pass
 
         msg = f"🔔 *{ai_msg}*\n\n"
-        for tag, wos in alerts.items():
-            msg += f"{tag}\n" + "\n".join(wos) + "\n\n"
+        for tag, tickets in alerts.items():
+            # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
+            tickets.sort(key=lambda x: get_priority_rank(x['cust_type']))
+            
+            wos_formatted = []
+            for t in tickets:
+                device_str = f" \\- {escape_md(t['device'])}" if t['device'] else ""
+                type_str = f" \\({escape_md(t['cust_type'])}\\)" if t['cust_type'] else ""
+                wos_formatted.append(f"▫️ `{escape_md(t['incident'])}` \\[{escape_md(t['status'])}\\]{type_str}{device_str}")
+                
+            msg += f"{tag}\n" + "\n".join(wos_formatted) + "\n\n"
         return msg
     except Exception as e:
-        return f"❌ *Error ACTCOMP:* {escape_md(str(e))}"
+        return f"❌ *Error Cek Open:* {escape_md(str(e))}"
 
 def fetch_rekap_data():
     if not ws_wo: return r"❌ Google Sheet tidak terhubung\."
     try:
         rows = ws_wo.get_all_values()
-        if not rows: return "Data Kosong"
-        header = [str(h).upper().strip() for h in rows[0]]
-        idx_status, idx_tech = header.index('STATUS'), header.index('TEKNISI')
-        idx_wonum = header.index('WONUM')
+        if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
+        header = [str(h).upper().strip() for h in rows[0]]
+        idx_status, idx_team, idx_incident, _, idx_cust_type = resolve_headers(header)
+        
+        if idx_status == -1 or idx_team == -1 or idx_incident == -1:
+            return r"❌ Struktur kolom Sheet tidak sesuai\. Pastikan terdapat kolom STATUS, TEAM/TEKNISI, dan INCIDENT/WONUM\."
+            
         pivot = {}
-        total = {'KP': 0, 'KT': 0, 'OGP': 0, 'PSG': 0, 'PS': 0}
-        active_tags = set()
+        total = {'OPEN': 0, 'CLOSED': 0}
+        
+        for team in TEAM_LIST:
+            pivot[team] = {'OPEN': 0, 'CLOSED': 0}
+            
+        unmapped_teams = {}
 
         for row in rows[1:]:
-            if len(row) <= max(idx_status, idx_tech, idx_wonum) or not str(row[idx_wonum]).strip():
+            if len(row) <= max(idx_status, idx_team, idx_incident):
                 continue
-            tech_raw = str(row[idx_tech]).strip()
-            tags = get_team_tags(tech_raw)
-            if not tags: continue
             
-            tech = resolve_canonical_team(tech_raw)
-            if not tech: continue
+            incident = str(row[idx_incident]).strip()
+            if not incident:
+                continue
+                
+            status_raw = str(row[idx_status]).upper().strip()
+            team_raw = str(row[idx_team]).strip()
             
-            status = str(row[idx_status]).upper().strip()
-            if tech not in pivot: pivot[tech] = {'KP': 0, 'KT': 0, 'OGP': 0, 'PSG': 0, 'PS': 0}
+            is_closed = any(x in status_raw for x in KATEGORI_CLOSED)
+            cat = 'CLOSED' if is_closed else 'OPEN'
             
-            cat = 'OGP'
-            if status == 'COMPLETE PS': cat = 'PS'
-            elif any(x in status for x in KATEGORI_TERPASANG): cat = 'PSG'
-            elif any(x in status for x in KATEGORI_KENDALA_PELANGGAN): cat = 'KP'
-            elif any(x in status for x in KATEGORI_KENDALA_TEKNIS): cat = 'KT'
+            canonical_team = resolve_canonical_team(team_raw)
+            if canonical_team:
+                if canonical_team not in pivot:
+                    pivot[canonical_team] = {'OPEN': 0, 'CLOSED': 0}
+                pivot[canonical_team][cat] += 1
+            else:
+                if team_raw:
+                    if team_raw not in unmapped_teams:
+                        unmapped_teams[team_raw] = {'OPEN': 0, 'CLOSED': 0}
+                    unmapped_teams[team_raw][cat] += 1
             
-            pivot[tech][cat] += 1
             total[cat] += 1
-            active_tags.add(tags)
 
-        # Bagian 1: Tabel Utama
-        msg = "📊 *REKAP PRODUKTIVITAS BERKALA*\n"
-        msg += "```\n"
-        msg += "TEKNISI    |KP|KT|OGP|PSG|PS \n"
-        msg += "-----------|--|--|---|---|---\n"
-        for name, v in pivot.items():
-            short_name = get_short_name(name).ljust(10)
-            msg += f"{short_name} |{str(v['KP']).rjust(2)}|{str(v['KT']).rjust(2)}|{str(v['OGP']).rjust(3)}|{str(v['PSG']).rjust(3)}|{str(v['PS']).rjust(2)}\n"
-        msg += "-----------|--|--|---|---|---\n"
-        msg += f"{'TOTAL'.ljust(10)} |{str(total['KP']).rjust(2)}|{str(total['KT']).rjust(2)}|{str(total['OGP']).rjust(3)}|{str(total['PSG']).rjust(3)}|{str(total['PS']).rjust(2)}\n"
-        msg += "```\n"
-        
-        msg += "📍 *Ringkasan:*\n"
-        msg += f"🔵 *Total PS* : {total['PS']} WO\n"
-        msg += f"🟢 *Total Terpasang* : {total['PSG']} WO\n"
-        msg += f"⚠️ *Total Kendala* : {total['KP']+total['KT']} WO\n"
-        msg += f"⏳ *Total OGP* : {total['OGP']} WO\n\n"
-        
-        # Bagian 2: KLASEMEN PS (Bar Chart)
-        sorted_ps = sorted(pivot.items(), key=lambda x: x[1]['PS'], reverse=True)
-        max_ps = max([v['PS'] for v in pivot.values()]) if pivot else 1
-        bar_width = 10
+        for ut, vals in unmapped_teams.items():
+            pivot[ut] = vals
 
-        msg += "🏆 *KLASEMEN PS HARI INI:*\n"
+        sorted_teams = sorted(pivot.items(), key=lambda x: x[0])
+
+        msg = "📊 *REKAP GANGGUAN MPW \\(OPEN & CLOSED\\)*\n"
         msg += "```\n"
-        for name, v in sorted_ps:
-            count = v['PS']
+        msg += "TEKNISI    | OPEN | CLOSED | TOTAL\n"
+        msg += "-----------|------|--------|------\n"
+        
+        for name, v in sorted_teams:
+            t_total = v['OPEN'] + v['CLOSED']
+            if t_total == 0:
+                continue
             short_name = get_short_name(name).ljust(10)
-            fill = int((count / max_ps) * bar_width) if max_ps > 0 else 0
-            bar = "█" * fill + "░" * (bar_width - fill)
-            msg += f"{short_name} {bar} {str(count).zfill(2)}\n"
+            msg += f"{short_name} | {str(v['OPEN']).rjust(4)} | {str(v['CLOSED']).rjust(6)} | {str(t_total).rjust(5)}\n"
+            
+        msg += "-----------|------|--------|------\n"
+        grand_total = total['OPEN'] + total['CLOSED']
+        msg += f"{'TOTAL'.ljust(10)} | {str(total['OPEN']).rjust(4)} | {str(total['CLOSED']).rjust(6)} | {str(grand_total).rjust(5)}\n"
         msg += "```\n"
         
-        msg += "👥 *On Duty:* " + " ".join(list(active_tags))
+        pct_resolved = (total['CLOSED'] / grand_total * 100) if grand_total > 0 else 0
+        
+        msg += "📍 *Ringkasan Gangguan:*\n"
+        msg += f"🔴 *Total Open* : {total['OPEN']} Tiket\n"
+        msg += f"🟢 *Total Closed* : {total['CLOSED']} Tiket\n"
+        pct_str = f"{pct_resolved:.1f}".replace('.', '\\.')
+        msg += f"📈 *Resolution Rate* : {pct_str}%\n\n"
+        
+        open_tickets = []
+        for row in rows[1:]:
+            if len(row) <= max(idx_status, idx_team, idx_incident):
+                continue
+            incident = str(row[idx_incident]).strip()
+            status_raw = str(row[idx_status]).upper().strip()
+            team_raw = str(row[idx_team]).strip()
+            cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
+            
+            if incident and not any(x in status_raw for x in KATEGORI_CLOSED):
+                open_tickets.append((incident, team_raw, status_raw, cust_type))
+                
+        if open_tickets:
+            # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
+            open_tickets.sort(key=lambda x: (get_priority_rank(x[3]), x[0]))
+            
+            msg += "⚠️ *Daftar Tiket PENDING / OPEN:*\n"
+            for inc, t, st, ct in open_tickets[:15]:
+                ct_str = f" \\({escape_md(ct)}\\)" if ct else ""
+                msg += f"• `{escape_md(inc)}` \\[{escape_md(st)}\\]{ct_str} \\- {escape_md(t)}\n"
+            if len(open_tickets) > 15:
+                msg += f"_+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
+        else:
+            msg += "✅ *Semua gangguan telah CLOSED\\!*\n"
+            
         return msg
     except Exception as e:
         return f"❌ *Error Rekap:* {escape_md(str(e))}"

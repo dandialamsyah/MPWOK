@@ -5,7 +5,7 @@ import telebot
 from google import genai
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID
-from sheets_handler import fetch_actcomp_data, fetch_rekap_data
+from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data
 
 # Inisialisasi Client Gemini API
 client = None
@@ -27,8 +27,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 try:
     bot.set_my_commands([
         telebot.types.BotCommand("start", "Mulai bot & Tampilkan menu utama"),
-        telebot.types.BotCommand("rekap", "Melihat rekap produktivitas berkala"),
-        telebot.types.BotCommand("cek_actcomp", "Memeriksa status ACTCOMP / BAI pending"),
+        telebot.types.BotCommand("rekap", "Melihat rekap gangguan berkala"),
+        telebot.types.BotCommand("cek_open", "Memeriksa gangguan yang masih OPEN"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
 except Exception as e:
@@ -38,7 +38,7 @@ except Exception as e:
 def get_main_menu_keyboard():
     markup = telebot.types.InlineKeyboardMarkup()
     markup.row(telebot.types.InlineKeyboardButton("📊 Tampilkan Rekap", callback_data="btn_rekap"))
-    markup.row(telebot.types.InlineKeyboardButton("🔔 Cek ACTCOMP (Pending BAI)", callback_data="btn_cek_actcomp"))
+    markup.row(telebot.types.InlineKeyboardButton("🔔 Cek Gangguan Open", callback_data="btn_cek_open"))
     markup.row(telebot.types.InlineKeyboardButton("🆔 Cek ID Chat", callback_data="btn_id"))
     return markup
 
@@ -56,9 +56,9 @@ def auto_report_worker():
                         bot.send_message(GROUP_ID, fetch_rekap_data(), parse_mode="MarkdownV2")
                         last_rekap = now
                     if now - last_actcomp > 1800:
-                        actcomp_msg = fetch_actcomp_data(client, MODEL_ID)
-                        if "Semua status ACTCOMP sudah beres" not in actcomp_msg:
-                            bot.send_message(GROUP_ID, actcomp_msg, parse_mode="MarkdownV2")
+                        open_msg = fetch_open_tickets_alert(client, MODEL_ID)
+                        if "Semua tiket gangguan sudah CLOSED" not in open_msg:
+                            bot.send_message(GROUP_ID, open_msg, parse_mode="MarkdownV2")
                         last_actcomp = now
             time.sleep(60)
         except Exception as e:
@@ -92,10 +92,10 @@ def handle_rekap(message):
     bot.send_chat_action(message.chat.id, 'typing')
     bot.reply_to(message, fetch_rekap_data(), parse_mode="MarkdownV2")
 
-@bot.message_handler(commands=['cek_actcomp'])
-def handle_cek_actcomp(message):
+@bot.message_handler(commands=['cek_open'])
+def handle_cek_open(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    bot.reply_to(message, fetch_actcomp_data(client, MODEL_ID), parse_mode="MarkdownV2")
+    bot.reply_to(message, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
@@ -108,9 +108,9 @@ def handle_callback_queries(call):
         bot.send_chat_action(call.message.chat.id, 'typing')
         bot.send_message(call.message.chat.id, fetch_rekap_data(), parse_mode="MarkdownV2")
         
-    elif call.data == "btn_cek_actcomp":
+    elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        bot.send_message(call.message.chat.id, fetch_actcomp_data(client, MODEL_ID), parse_mode="MarkdownV2")
+        bot.send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
         
     elif call.data == "btn_id":
         chat_id = call.message.chat.id
