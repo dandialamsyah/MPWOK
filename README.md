@@ -1,36 +1,29 @@
-# Bot WOTRAX - Asisten Operasional Korlap & Teknisi (Google Sheets & Gemini AI)
+# Bot Monitoring Gangguan Assurance Mempawah (Google Sheets & Gemini AI)
 
-Bot WOTRAX adalah bot Telegram operasional berbasis Python yang dirancang untuk memantau produktivitas tim teknisi lapangan secara real-time langsung dari data Google Sheets Anda. Bot ini juga terintegrasi dengan **Gemini AI** untuk merumuskan pesan penagihan berkas penunjang (BAI) secara otomatis ke teknisi.
+Bot Telegram ini dirancang khusus untuk memantau status gangguan (Open & Closed) secara real-time langsung dari data Google Sheets Anda untuk tim teknisi assurance Mempawah. Bot ini juga terintegrasi dengan **Gemini AI** untuk merumuskan pesan pengingat penyelesaian tiket yang masih Open ke teknisi.
 
 ---
 
 ## 🚀 Fitur Utama
 
-1. **Rekap Produktivitas Berkala**:
-   - Menghasilkan tabel pivot teks sederhana antara nama teknisi dan status pekerjaan (`KP` = Kendala Pelanggan, `KT` = Kendala Teknis, `OGP` = Ongoing Process, `PSG` = Terpasang, `PS` = Complete PS).
-   - Menampilkan klasemen visual prestasi PS hari ini menggunakan grafik balok (`████░░░░░░ 04`).
-   - Dikirimkan secara otomatis ke grup koordinasi setiap **1 jam sekali** pada jam kerja (08:00 - 00:00).
+1. **Rekap Gangguan Berkala (`/rekap`)**:
+   * Menampilkan tabel pivot teks antara nama teknisi dan status gangguan (**OPEN** dan **CLOSED**).
+   * Menampilkan ringkasan jumlah total gangguan, total open, total closed, dan persentase penyelesaian (*Resolution Rate*).
+   * Menampilkan daftar tiket yang masih pending/open yang diurutkan berdasarkan prioritas jenis customer:
+     1. **MANJA**
+     2. **REGULER**
+     3. **HVC_GOLD**
+   * Dikirim otomatis ke grup koordinasi setiap **1 jam sekali** pada jam kerja (08:00 - 00:00).
 
-2. **Cek ACTCOMP (Tagihan BAI Otomatis)**:
-   - Mendeteksi pekerjaan berstatus `ACTCOMP` yang belum mengumpulkan berkas BAI.
-   - Menggunakan **Gemini AI (Google GenAI SDK)** untuk membuat draf pesan penagihan berkas BAI secara variatif, tegas, namun tetap santai.
-   - Mentag (@mention) username Telegram teknisi yang bersangkutan secara otomatis.
-   - Berjalan otomatis setiap **30 menit sekali** (08:00 - 00:00), dengan sistem penyaringan cerdas: **jika tidak ada antrean pending ACTCOMP, bot tidak akan mengirim pesan apa pun ke grup** agar tidak mengganggu.
+2. **Pengingat Tiket Open (`/cek_open`)**:
+   * Mendeteksi tiket gangguan berstatus Open/Pending.
+   * Menggunakan **Gemini AI (Google GenAI SDK)** untuk membuat draf pesan pengingat penyelesaian tiket secara santai namun tegas.
+   * Mengelompokkan tiket open per teknisi, mengurutkannya berdasarkan prioritas jenis customer, dan mentag (@mention) username Telegram teknisi yang bersangkutan secara otomatis.
+   * Berjalan otomatis setiap **30 menit sekali** (08:00 - 00:00). Jika tidak ada antrean tiket open, bot tidak akan mengirim pesan apa pun agar tidak mengganggu grup.
 
-3. **Cerdas & Tahan Eror (Name Resolution & Row Filter)**:
-   - **Resolusi Nama Teknisi**: Secara cerdas mencocokkan variasi penulisan nama di Google Sheet (misal: `"DIKY FEBRIANSAH - SAMSUL"` atau `"ABIL- HAFIZ"`) ke nama resmi di konfigurasi (`"DIKY FEBRIANSAH"` atau `"ABIL - APIS"`), sehingga statistik load balancing dan klasemen terhitung akurat tanpa baris ganda.
-   - **Filter Baris Kosong**: Menyaring data berdasarkan kolom `WONUM` agar baris kosong di bawah sheet tidak merusak statistik rekap.
-   - **Pembersih Tanda Kutip**: Otomatis membersihkan tanda kutip (`"` atau `'`) dari isian variabel di cloud/Railway untuk menghindari eror parser token.
-
----
-
-## 📂 Struktur Repositori
-
-* **`main.py`**: Berkas utama logika bot Telegram (`telebot`) beserta pengaturan *background worker threads* (penjadwal laporan otomatis).
-* **`sheets_handler.py`**: Berkas backend pengolahan Google Sheets API (`gspread`) dan pemanggilan model Gemini AI.
-* **`config.py`**: Konfigurasi terpusat berisi token, kategori status pekerjaan, dan daftar resmi tim teknisi lapangan beserta username Telegram mereka.
-* **`prompt_belajar_bot.md`**: Prompt panduan belajar terperinci untuk membuat bot ini dari nol menggunakan AI coding assistant.
-* **`.gitignore`**: Mengamankan berkas kredensial sensitif agar tidak terunggah ke repositori GitHub.
+3. **Struktur Fleksibel & Cerdas (Dynamic Headers & Name Resolution)**:
+   * **Pencarian Kolom Dinamis**: Bot secara otomatis mendeteksi kolom meskipun letaknya bergeser. Mendukung header kolom seperti `STATUS`/`STATE`, `TEAM`/`TEKNISI`/`PETUGAS`, `INCIDENT`/`WONUM`/`TICKET ID`, `DEVICE NAME`/`ALPRO`/`ODP`, serta `CUSTOMER TYPE`/`PRIORITAS`.
+   * **Resolusi Nama Teknisi**: Secara cerdas mencocokkan variasi penulisan nama di Google Sheet ke nama resmi di konfigurasi (`config.py`).
 
 ---
 
@@ -38,29 +31,34 @@ Bot WOTRAX adalah bot Telegram operasional berbasis Python yang dirancang untuk 
 
 ### 1. Prasyarat
 Pastikan komputer Anda sudah terinstal Python 3.10+ dan Anda memiliki:
-- `credentials.json` (Google Service Account Credentials)
-- Token Bot Telegram (dari @BotFather)
-- API Key Gemini (dari Google AI Studio)
+* File `credentials.json` (Google Service Account Credentials)
+* Token Bot Telegram (dari @BotFather)
+* API Key Gemini (dari Google AI Studio)
 
-### 2. Instalasi Modul
-Buka terminal pada direktori proyek, lalu instal modul yang dibutuhkan:
+### 2. Bagikan Akses Google Sheet
+Bagikan akses edit (Share as Editor) spreadsheet Google Sheet Anda ke email service account bot berikut:
+`korlapsnw@bot-korlap-ai.iam.gserviceaccount.com`
+
+### 3. Instalasi Modul
+Buka terminal pada direktori proyek, lalu buat virtual environment dan instal modul yang dibutuhkan:
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
 ```
 
-### 3. Konfigurasi Lingkungan (`.env`)
+### 4. Konfigurasi Lingkungan (`.env`)
 Buat berkas `.env` pada direktori utama proyek, lalu isi:
 ```env
 BOT_TOKEN=TOKEN_BOT_TELEGRAM_ANDA
 GEMINI_KEY=API_KEY_GEMINI_ANDA
-SHEET_NAME=Produktivitas_BOT
+SHEET_NAME=NAMA_SPREADSHEET_GOOGLE_SHEET_ANDA
 GROUP_ID=ID_CHAT_GRUP_TELEGRAM_ANDA
 ```
 
-### 4. Menjalankan Bot
+### 5. Menjalankan Bot
 Jalankan bot melalui terminal lokal Anda:
 ```bash
-python main.py
+.\.venv\Scripts\python main.py
 ```
 
 ---
@@ -69,13 +67,13 @@ python main.py
 
 Untuk menjaga bot Anda tetap menyala tanpa perlu menghidupkan komputer lokal:
 
-1. Buat **Private Repository** di GitHub Anda, lalu unggah proyek ini ke repositori tersebut (`.env` dan `credentials.json` otomatis tidak ikut terunggah).
+1. Buat **Private Repository** di GitHub Anda, lalu unggah proyek ini menggunakan **GitHub Desktop** (pastikan opsi *Keep this code private* tercentang). File `.env`, folder `.venv`, dan `credentials.json` otomatis tidak akan ikut terunggah karena dilindungi oleh `.gitignore`.
 2. Masuk ke **[Railway.app](https://railway.app/)** menggunakan akun GitHub Anda.
 3. Buat **New Project** dan pilih **Deploy from GitHub repo**, lalu arahkan ke repositori proyek ini.
 4. Masuk ke tab **Variables** di panel Railway Anda, lalu tambahkan variabel-variabel berikut:
-   - `BOT_TOKEN` = *(Token bot Telegram)*
-   - `GEMINI_KEY` = *(API Key Gemini)*
-   - `SHEET_NAME` = `Produktivitas_BOT`
-   - `GROUP_ID` = *(ID Grup Telegram Anda)*
-   - `GOOGLE_CREDENTIALS` = *(Buka berkas `credentials.json` Anda, salin seluruh isi teks di dalamnya, dan tempel/paste di kolom Value variabel ini)*
-5. Klik **Save**. Railway akan mendeteksi pembaruan dan secara otomatis mendeploy bot Anda.
+   * `BOT_TOKEN` = *(Token bot Telegram)*
+   * `GEMINI_KEY` = *(API Key Gemini)*
+   * `SHEET_NAME` = *(Nama Google Sheet Anda)*
+   * `GROUP_ID` = *(ID Grup Telegram Anda)*
+   * `GOOGLE_CREDENTIALS` = *(Buka berkas `credentials.json` Anda, salin seluruh isi teks JSON di dalamnya, dan tempel/paste di kolom Value variabel ini)*
+5. Klik **Save**. Railway akan memuat ulang dan mendeploy bot Anda secara otomatis.
