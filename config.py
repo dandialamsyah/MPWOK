@@ -20,7 +20,8 @@ def load_dotenv():
                     # Menghapus tanda kutip jika ada
                     if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
                         val = val[1:-1]
-                    os.environ[key] = val
+                    if key not in os.environ:
+                        os.environ[key] = val
 
 # Pemuatan Variabel Lingkungan
 load_dotenv()
