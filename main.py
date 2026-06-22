@@ -1,7 +1,9 @@
 import time
 import threading
 import logging
+# pyrefly: ignore [missing-import]
 import telebot
+# pyrefly: ignore [missing-import]
 from google import genai
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID
@@ -70,7 +72,7 @@ def auto_report_worker():
 @bot.message_handler(commands=['start', 'help'])
 def handle_start_help(message):
     msg = (
-        "👋 *Selamat datang di Bot WOTRAX\\!*\n\n"
+        "👋 *Selamat datang di Bot Monitoring Gangguan Mempawah\\!*\n\n"
         "Silakan pilih menu di bawah ini untuk berinteraksi dengan bot secara langsung:"
     )
     bot.send_message(message.chat.id, msg, parse_mode="MarkdownV2", reply_markup=get_main_menu_keyboard())
@@ -126,7 +128,7 @@ def handle_callback_queries(call):
 # ==================== MAIN PROGRAM ====================
 
 if __name__ == "__main__":
-    logging.info("🚀 Bot WOTRAX Activated & Running...")
+    logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
     
     # Jalankan worker background di thread terpisah
     threading.Thread(target=auto_report_worker, daemon=True).start()
