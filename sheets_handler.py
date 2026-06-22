@@ -2,6 +2,7 @@ import re
 import os
 import json
 import logging
+# pyrefly: ignore [missing-import]
 import gspread
 from gspread import Cell
 from google.oauth2.service_account import Credentials
