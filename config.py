@@ -26,13 +26,21 @@ def load_dotenv():
 # Pemuatan Variabel Lingkungan
 load_dotenv()
 
+def strip_quotes(val):
+    if not val:
+        return val
+    val = val.strip()
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        return val[1:-1]
+    return val
+
 # Konfigurasi Utama
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GEMINI_KEY = os.getenv("GEMINI_KEY")
-SHEET_NAME = os.getenv("SHEET_NAME", "Produktivitas_BOT")
+BOT_TOKEN = strip_quotes(os.getenv("BOT_TOKEN"))
+GEMINI_KEY = strip_quotes(os.getenv("GEMINI_KEY"))
+SHEET_NAME = strip_quotes(os.getenv("SHEET_NAME", "Produktivitas_BOT"))
 
 # Parse GROUP_ID secara aman
-group_id_env = os.getenv("GROUP_ID")
+group_id_env = strip_quotes(os.getenv("GROUP_ID"))
 if group_id_env:
     try:
         GROUP_ID = int(group_id_env)
