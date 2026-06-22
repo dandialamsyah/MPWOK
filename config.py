@@ -72,7 +72,7 @@ KATEGORI_KENDALA_TEKNIS = [
 
 # ==================== MAPPING TEKNISI ====================
 TECH_TEAMS = [
-    {"names": ["AKMAL AZAMI", "ANDRE"], "tags": "@Guruku_Sayang @ANDRE16011954"},
+    {"names": ["AKMAL AZAMI", "ANDRE"], "tags": "@Guruku_Sayang @Wiwok_wowok"},
     {"names": ["YOGI RINALDI", "REJA"], "tags": "@Yogirinaldi @rjaaanihhh"},
     {"names": ["ANDRYANSYAH SAPUTRA", "RATNO"], "tags": "@Andryansyahsaputra @Ratno_Aje"},
     {"names": ["ARI FITRIANSYAH", "SYEKHUL AKHYAR"], "tags": "@Ari_fitriansyah29 @Syekhulakhyar"},
@@ -84,7 +84,6 @@ TECH_TEAMS = [
     {"names": ["NURDIN ISMAIL", "MUHAMMAD HIDAYAT"], "tags": "@nurdin_1919 @Hidayat_SKY"},
     {"names": ["SUGIANTO", "ALDIANSYAH"], "tags": "@SihoooJS50 @aldinsh"},
     {"names": ["DIKY FEBRIANSAH"], "tags": "@Dikyfebriansah46"},
-    {"names": ["DWI FIRMANSYAH"], "tags": "@Muridku_Sayang"},
     {"names": ["ABIL", "APIS"], "tags": "@abillll11 @Hafidz_ang"},
 ]
 
@@ -101,8 +100,7 @@ TEAM_LIST = [
     "NURDIN ISMAIL - MUHAMMAD HIDAYAT",
     "SUGIANTO - ALDIANSYAH",
     "DIKY FEBRIANSAH",
-    "DWI FIRMANSYAH",
     "ABIL - APIS"
 ]
 
-TEKNISI_LIBUR = ["AKMAL AZAMI - DWI FIRMANSYAH"]
+TEKNISI_LIBUR = []
