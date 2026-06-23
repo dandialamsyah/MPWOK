@@ -21,14 +21,15 @@ import time
 
 # Setup Google Sheets
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-ws_wo = None
+ws_cache = {}
 
-def get_worksheet():
-    global ws_wo
-    if ws_wo is not None:
-        return ws_wo
+def get_worksheet(sheet_name=None):
+    global ws_cache
+    cache_key = sheet_name or "default"
+    if ws_cache.get(cache_key) is not None:
+        return ws_cache[cache_key]
     try:
-        logging.info("Mencoba menghubungkan kembali ke Google Sheets...")
+        logging.info(f"Mencoba menghubungkan kembali ke Google Sheets ({cache_key})...")
         google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
         if google_creds_json:
             info = json.loads(google_creds_json)
@@ -37,62 +38,68 @@ def get_worksheet():
             creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
         gc = gspread.authorize(creds)
         sh = gc.open(SHEET_NAME)
-        ws_wo = sh.sheet1
-        return ws_wo
+        if sheet_name:
+            ws = sh.worksheet(sheet_name)
+        else:
+            ws = sh.sheet1
+        ws_cache[cache_key] = ws
+        return ws
     except Exception as e:
-        logging.error(f"Gagal inisialisasi Google Sheets: {e}")
-        ws_wo = None
+        logging.error(f"Gagal inisialisasi Google Sheets ({cache_key}): {e}")
+        ws_cache[cache_key] = None
         return None
 
 # Coba inisialisasi pertama kali saat import
 get_worksheet()
 
 # Caching Google Sheets
-_cached_rows = None
-_cache_time = 0
+_cached_rows_dict = {}
+_cache_time_dict = {}
 CACHE_TTL = 15 # cache duration in seconds
 
-def get_sheet_rows():
-    global _cached_rows, _cache_time
+def get_sheet_rows(sheet_name=None):
+    global _cached_rows_dict, _cache_time_dict
     current_time = time.time()
+    cache_key = sheet_name or "default"
     
     # Gunakan cache jika masih valid
-    if _cached_rows is not None and (current_time - _cache_time) < CACHE_TTL:
-        logging.info("Menggunakan data Google Sheets dari cache.")
-        return _cached_rows
+    if cache_key in _cached_rows_dict and (current_time - _cache_time_dict.get(cache_key, 0)) < CACHE_TTL:
+        logging.info(f"Menggunakan data Google Sheets ({cache_key}) dari cache.")
+        return _cached_rows_dict[cache_key]
         
-    ws = get_worksheet()
+    ws = get_worksheet(sheet_name)
     if not ws:
         # Fallback ke cache kadaluarsa jika ada
-        if _cached_rows is not None:
-            logging.warning("Gagal koneksi Sheets, menggunakan data cache kadaluarsa.")
-            return _cached_rows
-        raise Exception("Gagal terhubung ke Google Sheets dan tidak ada data cache.")
+        if cache_key in _cached_rows_dict:
+            logging.warning(f"Gagal koneksi Sheets, menggunakan data cache kadaluarsa untuk {cache_key}.")
+            return _cached_rows_dict[cache_key]
+        raise Exception(f"Gagal terhubung ke Google Sheets ({cache_key}) dan tidak ada data cache.")
         
     try:
-        logging.info("Mengambil data segar dari Google Sheets...")
+        logging.info(f"Mengambil data segar dari Google Sheets ({cache_key})...")
         rows = ws.get_all_values()
-        _cached_rows = rows
-        _cache_time = current_time
+        _cached_rows_dict[cache_key] = rows
+        _cache_time_dict[cache_key] = current_time
         return rows
     except Exception as e:
-        logging.warning(f"Error mengambil data Sheets: {e}. Mencoba re-inisialisasi...")
-        global ws_wo
-        ws_wo = None # force re-init
-        ws = get_worksheet()
+        logging.warning(f"Error mengambil data Sheets ({cache_key}): {e}. Mencoba re-inisialisasi...")
+        global ws_cache
+        if cache_key in ws_cache:
+            ws_cache[cache_key] = None # force re-init
+        ws = get_worksheet(sheet_name)
         if ws:
             try:
                 rows = ws.get_all_values()
-                _cached_rows = rows
-                _cache_time = current_time
+                _cached_rows_dict[cache_key] = rows
+                _cache_time_dict[cache_key] = current_time
                 return rows
             except Exception as retry_e:
-                logging.error(f"Gagal coba ulang ambil data Sheets: {retry_e}")
+                logging.error(f"Gagal coba ulang ambil data Sheets ({cache_key}): {retry_e}")
                 
         # Jika re-init gagal, fallback ke cache lama jika ada
-        if _cached_rows is not None:
-            logging.warning("Mencoba ulang gagal, menggunakan data cache kadaluarsa.")
-            return _cached_rows
+        if cache_key in _cached_rows_dict:
+            logging.warning(f"Mencoba ulang gagal, menggunakan data cache kadaluarsa untuk {cache_key}.")
+            return _cached_rows_dict[cache_key]
         raise e
 
 # Caching Gemini AI Message
@@ -209,9 +216,9 @@ def get_priority_rank(cust_type):
     else:
         return 4
 
-def fetch_open_tickets_alert(client=None, model_id=None):
+def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
     try:
-        rows = get_sheet_rows()
+        rows = get_sheet_rows(sheet_name)
         if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
         header = [str(h).upper().strip() for h in rows[0]]
@@ -246,11 +253,15 @@ def fetch_open_tickets_alert(client=None, model_id=None):
                     'cust_type': cust_type
                 })
                 
-        if not alerts: return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
+        if not alerts:
+            if sheet_name:
+                return f"✅ *Semua tiket gangguan {escape_md(sheet_name)} sudah CLOSED\\!*"
+            return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
         
         ai_msg = get_ai_reminder_message(client, model_id)
 
-        msg = f"🔔 *{ai_msg}*\n\n"
+        prefix = "*(STA)* " if sheet_name else ""
+        msg = f"🔔 {prefix}*{ai_msg}*\n\n"
         for tag, tickets in alerts.items():
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
             tickets.sort(key=lambda x: get_priority_rank(x['cust_type']))
@@ -266,9 +277,9 @@ def fetch_open_tickets_alert(client=None, model_id=None):
     except Exception as e:
         return f"❌ *Error Cek Open:* {escape_md(str(e))}"
 
-def fetch_rekap_data():
+def fetch_rekap_data(sheet_name=None):
     try:
-        rows = get_sheet_rows()
+        rows = get_sheet_rows(sheet_name)
         if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
         header = [str(h).upper().strip() for h in rows[0]]
@@ -284,7 +295,7 @@ def fetch_rekap_data():
             pivot[team] = {'OPEN': 0, 'CLOSED': 0}
             
         unmapped_teams = {}
-
+ 
         for row in rows[1:]:
             if len(row) <= max(idx_status, idx_team, idx_incident):
                 continue
@@ -311,13 +322,14 @@ def fetch_rekap_data():
                     unmapped_teams[team_raw][cat] += 1
             
             total[cat] += 1
-
+ 
         for ut, vals in unmapped_teams.items():
             pivot[ut] = vals
-
+ 
         sorted_teams = sorted(pivot.items(), key=lambda x: x[0])
-
-        msg = "📊 *REKAP GANGGUAN MPW \\(OPEN & CLOSED\\)*\n"
+ 
+        title_tag = " STA" if sheet_name else ""
+        msg = f"📊 *REKAP GANGGUAN MPW{title_tag} \\(OPEN & CLOSED\\)*\n"
         msg += "```\n"
         msg += "TEKNISI    | OPEN | CLOSED | TOTAL\n"
         msg += "-----------|------|--------|------\n"

@@ -29,6 +29,8 @@ try:
         telebot.types.BotCommand("start", "Mulai bot & Tampilkan menu utama"),
         telebot.types.BotCommand("rekap", "Melihat rekap gangguan berkala"),
         telebot.types.BotCommand("cek_open", "Memeriksa gangguan yang masih OPEN"),
+        telebot.types.BotCommand("rekap_sta", "Melihat rekap gangguan STA berkala"),
+        telebot.types.BotCommand("cek_open_sta", "Memeriksa gangguan STA yang masih OPEN"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
 except Exception as e:
@@ -37,8 +39,14 @@ except Exception as e:
 # Helper untuk membuat keyboard menu utama
 def get_main_menu_keyboard():
     markup = telebot.types.InlineKeyboardMarkup()
-    markup.row(telebot.types.InlineKeyboardButton("📊 Tampilkan Rekap", callback_data="btn_rekap"))
-    markup.row(telebot.types.InlineKeyboardButton("🔔 Cek Gangguan Open", callback_data="btn_cek_open"))
+    markup.row(
+        telebot.types.InlineKeyboardButton("📊 Rekap MPW", callback_data="btn_rekap"),
+        telebot.types.InlineKeyboardButton("📊 Rekap STA", callback_data="btn_rekap_sta")
+    )
+    markup.row(
+        telebot.types.InlineKeyboardButton("🔔 Cek Open MPW", callback_data="btn_cek_open"),
+        telebot.types.InlineKeyboardButton("🔔 Cek Open STA", callback_data="btn_cek_open_sta")
+    )
     markup.row(telebot.types.InlineKeyboardButton("🆔 Cek ID Chat", callback_data="btn_id"))
     return markup
 
@@ -107,10 +115,20 @@ def handle_rekap(message):
     bot.send_chat_action(message.chat.id, 'typing')
     safe_reply_to(message, fetch_rekap_data(), parse_mode="MarkdownV2")
 
+@bot.message_handler(commands=['rekap_sta'])
+def handle_rekap_sta(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_rekap_data(sheet_name="insera 19"), parse_mode="MarkdownV2")
+
 @bot.message_handler(commands=['cek_open'])
 def handle_cek_open(message):
     bot.send_chat_action(message.chat.id, 'typing')
     safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
+
+@bot.message_handler(commands=['cek_open_sta'])
+def handle_cek_open_sta(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="insera 19"), parse_mode="MarkdownV2")
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
@@ -123,9 +141,17 @@ def handle_callback_queries(call):
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_rekap_data(), parse_mode="MarkdownV2")
         
+    elif call.data == "btn_rekap_sta":
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        safe_send_message(call.message.chat.id, fetch_rekap_data(sheet_name="insera 19"), parse_mode="MarkdownV2")
+        
     elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
+        
+    elif call.data == "btn_cek_open_sta":
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="insera 19"), parse_mode="MarkdownV2")
         
     elif call.data == "btn_id":
         chat_id = call.message.chat.id
