@@ -18,7 +18,7 @@ from config import (
 )
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 def parse_datetime(dt_str):
     if not dt_str:
@@ -53,7 +53,9 @@ def parse_datetime(dt_str):
 def calculate_duration_str(start_dt):
     if not start_dt:
         return ""
-    now = datetime.now()
+    # Gunakan timezone WIB (UTC+7) agar kalkulasi konsisten dengan waktu lokal di Indonesia/Google Sheets
+    tz_wib = timezone(timedelta(hours=7))
+    now = datetime.now(tz_wib).replace(tzinfo=None)
     diff = now - start_dt
     if diff.total_seconds() < 0:
         return "0 menit"
@@ -344,12 +346,14 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
             
             wos_formatted = []
             for t in tickets:
-                device_str = f" \\- {escape_md(t['device'])}" if t['device'] else ""
-                type_str = f" \\({escape_md(t['cust_type'])}\\)" if t['cust_type'] else ""
-                dur_str = f" \\(durasi: {escape_md(t['duration'])}\\)" if t['duration'] else ""
-                wos_formatted.append(f"▫️ `{escape_md(t['incident'])}` \\[{escape_md(t['status'])}\\]{type_str}{device_str}{dur_str}")
+                device_str = f" - {t['device']}" if t['device'] else ""
+                type_str = f" ({t['cust_type']})" if t['cust_type'] else ""
+                dur_str = f" (durasi: {t['duration']})" if t['duration'] else ""
+                wos_formatted.append(f"■ {t['incident']} [{t['status']}]{type_str}{device_str}{dur_str}")
                 
-            msg += f"{tag}\n" + "\n".join(wos_formatted) + "\n\n"
+            ticket_block = "\n".join(wos_formatted)
+            ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
+            msg += f"{tag}\n\n```\n{ticket_block_escaped}\n```\n\n"
         return msg
     except Exception as e:
         return f"❌ *Error Cek Open:* {escape_md(str(e))}"

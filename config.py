@@ -72,7 +72,7 @@ TEAM_LIST = [
     "CHAIRUL-YUDA",
     "DEDI",
     "DESTA-JEFRI",
-    "YOGI"
+    "YOGI",
     "BOBY-BAHRI"
 ]
 
