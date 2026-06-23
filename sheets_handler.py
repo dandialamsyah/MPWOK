@@ -18,6 +18,66 @@ from config import (
 )
 
 import time
+from datetime import datetime
+
+def parse_datetime(dt_str):
+    if not dt_str:
+        return None
+    dt_str = str(dt_str).strip()
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+    # Try just date if time parsing failed
+    date_formats = [
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+    ]
+    for fmt in date_formats:
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+def calculate_duration_str(start_dt):
+    if not start_dt:
+        return ""
+    now = datetime.now()
+    diff = now - start_dt
+    if diff.total_seconds() < 0:
+        return "0 menit"
+    
+    days = diff.days
+    hours, remainder = divmod(diff.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days} hari")
+    if hours > 0:
+        parts.append(f"{hours} jam")
+    if minutes > 0 or not parts:
+        parts.append(f"{minutes} menit")
+        
+    return " ".join(parts)
+
+def resolve_jam_open(header):
+    for jo_col in ['JAM OPEN', 'REPORTED DATE', 'REPORTED_DATE']:
+        if jo_col in header:
+            return header.index(jo_col)
+    return -1
+
 
 # Setup Google Sheets
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -230,6 +290,7 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
         
         header = [str(h).upper().strip() for h in rows[0]]
         idx_status, idx_team, idx_incident, idx_device, idx_cust_type = resolve_headers(header)
+        idx_jam_open = resolve_jam_open(header)
         
         if idx_status == -1 or idx_team == -1 or idx_incident == -1:
             return r"❌ Struktur kolom Sheet tidak sesuai\. Pastikan terdapat kolom STATUS, TEAM/TEKNISI, dan INCIDENT/WONUM\."
@@ -252,12 +313,20 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
                 device_val = row[idx_device] if idx_device != -1 and len(row) > idx_device else ""
                 cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
                 
+                duration_str = ""
+                if idx_jam_open != -1 and len(row) > idx_jam_open:
+                    jam_val = row[idx_jam_open].strip()
+                    dt_open = parse_datetime(jam_val)
+                    if dt_open:
+                        duration_str = calculate_duration_str(dt_open)
+                
                 if tags not in alerts: alerts[tags] = []
                 alerts[tags].append({
                     'incident': incident,
                     'status': status_raw,
                     'device': device_val,
-                    'cust_type': cust_type
+                    'cust_type': cust_type,
+                    'duration': duration_str
                 })
                 
         if not alerts:
@@ -277,7 +346,8 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
             for t in tickets:
                 device_str = f" \\- {escape_md(t['device'])}" if t['device'] else ""
                 type_str = f" \\({escape_md(t['cust_type'])}\\)" if t['cust_type'] else ""
-                wos_formatted.append(f"▫️ `{escape_md(t['incident'])}` \\[{escape_md(t['status'])}\\]{type_str}{device_str}")
+                dur_str = f" \\(durasi: {escape_md(t['duration'])}\\)" if t['duration'] else ""
+                wos_formatted.append(f"▫️ `{escape_md(t['incident'])}` \\[{escape_md(t['status'])}\\]{type_str}{device_str}{dur_str}")
                 
             msg += f"{tag}\n" + "\n".join(wos_formatted) + "\n\n"
         return msg
@@ -361,6 +431,7 @@ def fetch_rekap_data(sheet_name=None):
         pct_str = f"{pct_resolved:.1f}".replace('.', '\\.')
         msg += f"📈 *Resolution Rate* : {pct_str}%\n\n"
         
+        idx_jam_open = resolve_jam_open(header)
         open_tickets = []
         for row in rows[1:]:
             if len(row) <= max(idx_status, idx_team, idx_incident):
@@ -370,17 +441,25 @@ def fetch_rekap_data(sheet_name=None):
             team_raw = str(row[idx_team]).strip()
             cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
             
+            duration_str = ""
+            if idx_jam_open != -1 and len(row) > idx_jam_open:
+                jam_val = row[idx_jam_open].strip()
+                dt_open = parse_datetime(jam_val)
+                if dt_open:
+                    duration_str = calculate_duration_str(dt_open)
+            
             if incident and not any(x in status_raw for x in KATEGORI_CLOSED):
-                open_tickets.append((incident, team_raw, status_raw, cust_type))
+                open_tickets.append((incident, team_raw, status_raw, cust_type, duration_str))
                 
         if open_tickets:
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
             open_tickets.sort(key=lambda x: (get_priority_rank(x[3]), x[0]))
             
             msg += "⚠️ *Daftar Tiket PENDING / OPEN:*\n"
-            for inc, t, st, ct in open_tickets[:15]:
+            for inc, t, st, ct, dur in open_tickets[:15]:
                 ct_str = f" \\({escape_md(ct)}\\)" if ct else ""
-                msg += f"• `{escape_md(inc)}` \\[{escape_md(st)}\\]{ct_str} \\- {escape_md(t)}\n"
+                dur_str = f" \\(durasi: {escape_md(dur)}\\)" if dur else ""
+                msg += f"• `{escape_md(inc)}` \\[{escape_md(st)}\\]{ct_str} \\- {escape_md(t)}{dur_str}\n"
             if len(open_tickets) > 15:
                 msg += f"_\\+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
         else:
