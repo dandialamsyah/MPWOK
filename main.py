@@ -44,6 +44,42 @@ def get_main_menu_keyboard():
 
 
 
+# Helper untuk mengirim pesan dengan aman menggunakan fallback jika parse_mode gagal
+def safe_reply_to(message, text, parse_mode="MarkdownV2", reply_markup=None):
+    try:
+        return bot.reply_to(message, text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except telebot.apihelper.ApiTelegramException as e:
+        if "can't parse entities" in str(e) and parse_mode == "MarkdownV2":
+            logging.warning(f"Gagal kirim MarkdownV2, mencoba fallback ke Plaintext: {e}")
+            # Hapus backslash escape MarkdownV2 untuk pengiriman plaintext
+            plain = text.replace(r'\.', '.').replace(r'\-', '-').replace(r'\_', '_').replace(r'\+', '+').replace(r'\!', '!').replace(r'\(', '(').replace(r'\)', ')').replace(r'\[', '[').replace(r'\]', ']').replace(r'\=', '=')
+            plain = plain.replace('*', '').replace('`', '')
+            try:
+                return bot.reply_to(message, plain, reply_markup=reply_markup)
+            except Exception as ex:
+                logging.error(f"Gagal kirim fallback: {ex}")
+                raise ex
+        else:
+            logging.error(f"Gagal kirim reply_to: {e}")
+            raise e
+
+def safe_send_message(chat_id, text, parse_mode="MarkdownV2", reply_markup=None):
+    try:
+        return bot.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except telebot.apihelper.ApiTelegramException as e:
+        if "can't parse entities" in str(e) and parse_mode == "MarkdownV2":
+            logging.warning(f"Gagal kirim MarkdownV2, mencoba fallback ke Plaintext: {e}")
+            plain = text.replace(r'\.', '.').replace(r'\-', '-').replace(r'\_', '_').replace(r'\+', '+').replace(r'\!', '!').replace(r'\(', '(').replace(r'\)', ')').replace(r'\[', '[').replace(r'\]', ']').replace(r'\=', '=')
+            plain = plain.replace('*', '').replace('`', '')
+            try:
+                return bot.send_message(chat_id, plain, reply_markup=reply_markup)
+            except Exception as ex:
+                logging.error(f"Gagal kirim fallback: {ex}")
+                raise ex
+        else:
+            logging.error(f"Gagal kirim send_message: {e}")
+            raise e
+
 # ==================== COMMAND HANDLERS ====================
 
 @bot.message_handler(commands=['start', 'help'])
@@ -52,7 +88,7 @@ def handle_start_help(message):
         "👋 *Selamat datang di Bot Monitoring Gangguan Mempawah\\!*\n\n"
         "Silakan pilih menu di bawah ini untuk berinteraksi dengan bot secara langsung:"
     )
-    bot.send_message(message.chat.id, msg, parse_mode="MarkdownV2", reply_markup=get_main_menu_keyboard())
+    safe_send_message(message.chat.id, msg, parse_mode="MarkdownV2", reply_markup=get_main_menu_keyboard())
 
 @bot.message_handler(commands=['id'])
 def handle_id(message):
@@ -64,17 +100,17 @@ def handle_id(message):
         f"• Tipe Chat: `{chat_type}`\n\n"
         f"Gunakan ID di atas pada file `.env` sebagai `GROUP_ID` jika diperlukan\\."
     )
-    bot.reply_to(message, msg, parse_mode="MarkdownV2")
+    safe_reply_to(message, msg, parse_mode="MarkdownV2")
 
 @bot.message_handler(commands=['rekap'])
 def handle_rekap(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    bot.reply_to(message, fetch_rekap_data(), parse_mode="MarkdownV2")
+    safe_reply_to(message, fetch_rekap_data(), parse_mode="MarkdownV2")
 
 @bot.message_handler(commands=['cek_open'])
 def handle_cek_open(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    bot.reply_to(message, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
+    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
@@ -85,11 +121,11 @@ def handle_callback_queries(call):
     
     if call.data == "btn_rekap":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        bot.send_message(call.message.chat.id, fetch_rekap_data(), parse_mode="MarkdownV2")
+        safe_send_message(call.message.chat.id, fetch_rekap_data(), parse_mode="MarkdownV2")
         
     elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        bot.send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
+        safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
         
     elif call.data == "btn_id":
         chat_id = call.message.chat.id
@@ -100,7 +136,7 @@ def handle_callback_queries(call):
             f"• Tipe Chat: `{chat_type}`\n\n"
             f"Gunakan ID di atas pada file `.env` sebagai `GROUP_ID` jika diperlukan\\."
         )
-        bot.send_message(call.message.chat.id, msg, parse_mode="MarkdownV2")
+        safe_send_message(call.message.chat.id, msg, parse_mode="MarkdownV2")
 
 # ==================== MAIN PROGRAM ====================
 

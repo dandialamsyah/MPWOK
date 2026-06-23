@@ -17,23 +17,119 @@ from config import (
     TEKNISI_LIBUR
 )
 
+import time
+
 # Setup Google Sheets
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 ws_wo = None
 
-try:
-    google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
-    if google_creds_json:
-        info = json.loads(google_creds_json)
-        creds = Credentials.from_service_account_info(info, scopes=SCOPE)
-    else:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
-    gc = gspread.authorize(creds)
-    sh = gc.open(SHEET_NAME)
-    ws_wo = sh.sheet1
-except Exception as e:
-    logging.error(f"Gagal inisialisasi Google Sheets: {e}")
-    ws_wo = None
+def get_worksheet():
+    global ws_wo
+    if ws_wo is not None:
+        return ws_wo
+    try:
+        logging.info("Mencoba menghubungkan kembali ke Google Sheets...")
+        google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
+        if google_creds_json:
+            info = json.loads(google_creds_json)
+            creds = Credentials.from_service_account_info(info, scopes=SCOPE)
+        else:
+            creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
+        gc = gspread.authorize(creds)
+        sh = gc.open(SHEET_NAME)
+        ws_wo = sh.sheet1
+        return ws_wo
+    except Exception as e:
+        logging.error(f"Gagal inisialisasi Google Sheets: {e}")
+        ws_wo = None
+        return None
+
+# Coba inisialisasi pertama kali saat import
+get_worksheet()
+
+# Caching Google Sheets
+_cached_rows = None
+_cache_time = 0
+CACHE_TTL = 15 # cache duration in seconds
+
+def get_sheet_rows():
+    global _cached_rows, _cache_time
+    current_time = time.time()
+    
+    # Gunakan cache jika masih valid
+    if _cached_rows is not None and (current_time - _cache_time) < CACHE_TTL:
+        logging.info("Menggunakan data Google Sheets dari cache.")
+        return _cached_rows
+        
+    ws = get_worksheet()
+    if not ws:
+        # Fallback ke cache kadaluarsa jika ada
+        if _cached_rows is not None:
+            logging.warning("Gagal koneksi Sheets, menggunakan data cache kadaluarsa.")
+            return _cached_rows
+        raise Exception("Gagal terhubung ke Google Sheets dan tidak ada data cache.")
+        
+    try:
+        logging.info("Mengambil data segar dari Google Sheets...")
+        rows = ws.get_all_values()
+        _cached_rows = rows
+        _cache_time = current_time
+        return rows
+    except Exception as e:
+        logging.warning(f"Error mengambil data Sheets: {e}. Mencoba re-inisialisasi...")
+        global ws_wo
+        ws_wo = None # force re-init
+        ws = get_worksheet()
+        if ws:
+            try:
+                rows = ws.get_all_values()
+                _cached_rows = rows
+                _cache_time = current_time
+                return rows
+            except Exception as retry_e:
+                logging.error(f"Gagal coba ulang ambil data Sheets: {retry_e}")
+                
+        # Jika re-init gagal, fallback ke cache lama jika ada
+        if _cached_rows is not None:
+            logging.warning("Mencoba ulang gagal, menggunakan data cache kadaluarsa.")
+            return _cached_rows
+        raise e
+
+# Caching Gemini AI Message
+_cached_ai_msg = None
+_cached_ai_time = 0
+AI_CACHE_TTL = 300 # cache duration in seconds (5 minutes)
+
+def get_ai_reminder_message(client, model_id):
+    global _cached_ai_msg, _cached_ai_time
+    current_time = time.time()
+    
+    # Gunakan cache jika masih valid
+    if _cached_ai_msg is not None and (current_time - _cached_ai_time) < AI_CACHE_TTL:
+        logging.info("Menggunakan pesan AI dari cache.")
+        return _cached_ai_msg
+        
+    default_msg = "Ayo teman\\-teman, segera selesaikan tiket gangguan yang masih open ya\\!"
+    if not client or not model_id:
+        return default_msg
+        
+    try:
+        logging.info("Membuat pesan AI baru via Gemini API...")
+        res = client.models.generate_content(
+            model=model_id, 
+            contents="Berikan satu kalimat singkat, santai namun tetap tegas dalam bahasa Indonesia untuk mengingatkan teknisi agar segera menyelesaikan tiket gangguan (trouble ticket) yang masih OPEN. Maksimal 15 kata. Tanpa markdown."
+        )
+        raw_msg = res.candidates[0].content.parts[0].text.strip()
+        escaped = escape_md(raw_msg)
+        _cached_ai_msg = escaped
+        _cached_ai_time = current_time
+        return escaped
+    except Exception as e:
+        logging.warning(f"Gagal generate AI message: {e}. Menggunakan default/cache.")
+        if _cached_ai_msg is not None:
+            return _cached_ai_msg
+        return default_msg
+
 
 def escape_md(text):
     if not text:
@@ -114,9 +210,8 @@ def get_priority_rank(cust_type):
         return 4
 
 def fetch_open_tickets_alert(client=None, model_id=None):
-    if not ws_wo: return r"❌ Google Sheet tidak terhubung\."
     try:
-        rows = ws_wo.get_all_values()
+        rows = get_sheet_rows()
         if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
         header = [str(h).upper().strip() for h in rows[0]]
@@ -153,17 +248,7 @@ def fetch_open_tickets_alert(client=None, model_id=None):
                 
         if not alerts: return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
         
-        ai_msg = "Ayo teman\\-teman, segera selesaikan tiket gangguan yang masih open ya\\!"
-        if client and model_id:
-            try:
-                res = client.models.generate_content(
-                    model=model_id, 
-                    contents="Berikan satu kalimat singkat, santai namun tetap tegas dalam bahasa Indonesia untuk mengingatkan teknisi agar segera menyelesaikan tiket gangguan (trouble ticket) yang masih OPEN. Maksimal 15 kata. Tanpa markdown."
-                )
-                ai_msg = escape_md(res.candidates[0].content.parts[0].text.strip())
-            except Exception as e:
-                logging.warning(f"Gagal generate AI message: {e}")
-                pass
+        ai_msg = get_ai_reminder_message(client, model_id)
 
         msg = f"🔔 *{ai_msg}*\n\n"
         for tag, tickets in alerts.items():
@@ -182,9 +267,8 @@ def fetch_open_tickets_alert(client=None, model_id=None):
         return f"❌ *Error Cek Open:* {escape_md(str(e))}"
 
 def fetch_rekap_data():
-    if not ws_wo: return r"❌ Google Sheet tidak terhubung\."
     try:
-        rows = ws_wo.get_all_values()
+        rows = get_sheet_rows()
         if not rows or len(rows) < 2: return "Data Sheet Kosong"
         
         header = [str(h).upper().strip() for h in rows[0]]
@@ -279,7 +363,7 @@ def fetch_rekap_data():
                 ct_str = f" \\({escape_md(ct)}\\)" if ct else ""
                 msg += f"• `{escape_md(inc)}` \\[{escape_md(st)}\\]{ct_str} \\- {escape_md(t)}\n"
             if len(open_tickets) > 15:
-                msg += f"_+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
+                msg += f"_\\+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
         else:
             msg += "✅ *Semua gangguan telah CLOSED\\!*\n"
             
