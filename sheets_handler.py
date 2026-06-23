@@ -39,7 +39,20 @@ def get_worksheet(sheet_name=None):
         gc = gspread.authorize(creds)
         sh = gc.open(SHEET_NAME)
         if sheet_name:
-            ws = sh.worksheet(sheet_name)
+            try:
+                ws = sh.worksheet(sheet_name)
+            except gspread.exceptions.WorksheetNotFound:
+                # Coba cari case-insensitive
+                worksheets = sh.worksheets()
+                target_name = sheet_name.strip().lower()
+                ws = None
+                for w in worksheets:
+                    if w.title.strip().lower() == target_name:
+                        ws = w
+                        break
+                if ws is None:
+                    available_sheets = ", ".join([f"'{w.title}'" for w in worksheets])
+                    raise Exception(f"Worksheet '{sheet_name}' tidak ditemukan. Pilihan sheet yang ada: {available_sheets}")
         else:
             ws = sh.sheet1
         ws_cache[cache_key] = ws
@@ -47,10 +60,13 @@ def get_worksheet(sheet_name=None):
     except Exception as e:
         logging.error(f"Gagal inisialisasi Google Sheets ({cache_key}): {e}")
         ws_cache[cache_key] = None
-        return None
+        raise e
 
 # Coba inisialisasi pertama kali saat import
-get_worksheet()
+try:
+    get_worksheet()
+except Exception as e:
+    logging.warning(f"Inisialisasi awal Google Sheets gagal: {e}")
 
 # Caching Google Sheets
 _cached_rows_dict = {}
@@ -67,15 +83,8 @@ def get_sheet_rows(sheet_name=None):
         logging.info(f"Menggunakan data Google Sheets ({cache_key}) dari cache.")
         return _cached_rows_dict[cache_key]
         
-    ws = get_worksheet(sheet_name)
-    if not ws:
-        # Fallback ke cache kadaluarsa jika ada
-        if cache_key in _cached_rows_dict:
-            logging.warning(f"Gagal koneksi Sheets, menggunakan data cache kadaluarsa untuk {cache_key}.")
-            return _cached_rows_dict[cache_key]
-        raise Exception(f"Gagal terhubung ke Google Sheets ({cache_key}) dan tidak ada data cache.")
-        
     try:
+        ws = get_worksheet(sheet_name)
         logging.info(f"Mengambil data segar dari Google Sheets ({cache_key})...")
         rows = ws.get_all_values()
         _cached_rows_dict[cache_key] = rows
@@ -86,21 +95,19 @@ def get_sheet_rows(sheet_name=None):
         global ws_cache
         if cache_key in ws_cache:
             ws_cache[cache_key] = None # force re-init
-        ws = get_worksheet(sheet_name)
-        if ws:
-            try:
-                rows = ws.get_all_values()
-                _cached_rows_dict[cache_key] = rows
-                _cache_time_dict[cache_key] = current_time
-                return rows
-            except Exception as retry_e:
-                logging.error(f"Gagal coba ulang ambil data Sheets ({cache_key}): {retry_e}")
-                
-        # Jika re-init gagal, fallback ke cache lama jika ada
-        if cache_key in _cached_rows_dict:
-            logging.warning(f"Mencoba ulang gagal, menggunakan data cache kadaluarsa untuk {cache_key}.")
-            return _cached_rows_dict[cache_key]
-        raise e
+        try:
+            ws = get_worksheet(sheet_name)
+            rows = ws.get_all_values()
+            _cached_rows_dict[cache_key] = rows
+            _cache_time_dict[cache_key] = current_time
+            return rows
+        except Exception as retry_e:
+            logging.error(f"Gagal coba ulang ambil data Sheets ({cache_key}): {retry_e}")
+            # Jika re-init gagal, fallback ke cache lama jika ada
+            if cache_key in _cached_rows_dict:
+                logging.warning(f"Menggunakan data cache kadaluarsa untuk {cache_key}.")
+                return _cached_rows_dict[cache_key]
+            raise retry_e
 
 # Caching Gemini AI Message
 _cached_ai_msg = None
