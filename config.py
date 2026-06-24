@@ -63,7 +63,12 @@ TECH_TEAMS = [
     {"names": ["DEDI"], "tags": "@Dandelion_dedy"},
     {"names": ["DESTA-JEFRI", "DESTA", "JEFRI"], "tags": "@DestA_GigeL @makenioranggg"},
     {"names": ["YOGI"], "tags": "@yoimkumiss"},
-    {"names": ["BOBY-BAHRI"], "tags": "@Bobystwn0 @bahri1206"},
+    {"names": ["BAHRI-BOBY"], "tags": "@Bobystwn0 @bahri1206"},
+    {"names": ["DICKY-NAUFAL"], "tags": "@Dicky_Gunawan @nplafrisi"},
+    {"names": ["ARIF-JULIANDRI"], "tags": "@arifmaulana_10 @saputrajuliandri94"},
+    {"names": ["DEDY-DIKA"], "tags": "@dedy_nurwanda @dikaasii"},
+    {"names": ["MAMAN"], "tags": "@maman_3070"},
+    {"names": ["TINO-NIZAR"], "tags": "@Tinoeeee @Nizar_Qadrie"},
 ]
 
 TEAM_LIST = [
@@ -73,7 +78,16 @@ TEAM_LIST = [
     "DEDI",
     "DESTA-JEFRI",
     "YOGI",
-    "BOBY-BAHRI"
+    "BOBY-BAHRI",
+    "DICKY-NAUFAL",
+    "ARIF-JULIANDRI",
+    "DEDY-DIKA",
+    "MAMAN",
+    "TINO-NIZAR",
+
+
+    
+    
 ]
 
 TEKNISI_LIBUR = []
