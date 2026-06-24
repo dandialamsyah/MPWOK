@@ -216,24 +216,40 @@ def get_team_tags(name_in_sheet):
     name_upper = str(name_in_sheet).upper().strip()
     if not name_upper or any(x in name_upper for x in ["UNASSIGNED", "BLM ASSIGN"]): 
         return ""
-    for team in TECH_TEAMS:
-        if any(member in name_upper for member in team["names"]):
-            return team["tags"].replace('_', r'\_')
+    canonical_team = resolve_canonical_team(name_in_sheet)
+    if canonical_team:
+        for team in TECH_TEAMS:
+            if team["canonical"] == canonical_team:
+                return team["tags"].replace('_', r'\_')
     return f"Teknisi {escape_md(name_in_sheet)}"
 
 def resolve_canonical_team(name_in_sheet):
     name_upper = str(name_in_sheet).upper().strip()
     if not name_upper or any(x in name_upper for x in ["UNASSIGNED", "BLM ASSIGN"]):
         return None
-    for i, team in enumerate(TECH_TEAMS):
-        if any(member in name_upper for member in team["names"]):
-            if i < len(TEAM_LIST):
-                return TEAM_LIST[i]
+    
+    # 1. Try exact match first
+    for team in TECH_TEAMS:
+        if any(member == name_upper for member in team["names"]):
+            return team["canonical"]
+            
+    # 2. Try substring match (sorted by length descending to prioritize longer matches)
+    flat_members = []
+    for team in TECH_TEAMS:
+        for member in team["names"]:
+            flat_members.append((member, team["canonical"]))
+    flat_members.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    for member, canonical in flat_members:
+        if member in name_upper:
+            return canonical
+            
     return name_in_sheet
 
 def get_short_name(full_name):
     name = str(full_name).upper()
     mapping = {
+        "DEDI-HENDRA": "Dedi-Hndr",
         "ADE": "Ade-Andre", "ASEP": "Asep-Roni", "CHAIRUL": "Chrl-Yuda",
         "DEDI": "Dedi", "DESTA": "Dst-Jefri", "YOGI": "Yogi"
     }
