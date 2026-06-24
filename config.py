@@ -69,6 +69,11 @@ TECH_TEAMS = [
     {"names": ["DEDY-DIKA"], "tags": "@dedy_nurwanda @dikaasii"},
     {"names": ["MAMAN"], "tags": "@maman_3070"},
     {"names": ["TINO-NIZAR"], "tags": "@Tinoeeee @Nizar_Qadrie"},
+    {"names": ["DEDI"], "tags": "@Dandelion_dedy"},
+    {"names": ["RUDI-RANDA"], "tags": "@Randa_z @Rudi_hartono21"},
+    {"names": ["MERI"], "tags": "@PAPA_MUDA05"},
+
+    
 ]
 
 TEAM_LIST = [
@@ -76,6 +81,7 @@ TEAM_LIST = [
     "ASEP-RONI",
     "CHAIRUL-YUDA",
     "DEDI-HENDRA",
+    "DEDI",
     "DESTA-JEFRI",
     "YOGI",
     "BOBY-BAHRI",
@@ -84,6 +90,8 @@ TEAM_LIST = [
     "DEDY-DIKA",
     "MAMAN",
     "TINO-NIZAR",
+    "RUDI-RANDA",
+    "MERI",
 
 
     
