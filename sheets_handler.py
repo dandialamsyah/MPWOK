@@ -338,7 +338,7 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
         
         ai_msg = get_ai_reminder_message(client, model_id)
 
-        prefix = "*(STA)* " if sheet_name else ""
+        prefix = "*\\(STA\\)* " if sheet_name else ""
         msg = f"🔔 {prefix}*{ai_msg}*\n\n"
         for tag, tickets in alerts.items():
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
