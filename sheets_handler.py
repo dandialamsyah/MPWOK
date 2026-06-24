@@ -460,10 +460,15 @@ def fetch_rekap_data(sheet_name=None):
             open_tickets.sort(key=lambda x: (get_priority_rank(x[3]), x[0]))
             
             msg += "⚠️ *Daftar Tiket PENDING / OPEN:*\n"
+            wos_formatted = []
             for inc, t, st, ct, dur in open_tickets[:15]:
-                ct_str = f" \\({escape_md(ct)}\\)" if ct else ""
-                dur_str = f" \\(durasi: {escape_md(dur)}\\)" if dur else ""
-                msg += f"• `{escape_md(inc)}` \\[{escape_md(st)}\\]{ct_str} \\- {escape_md(t)}{dur_str}\n"
+                ct_str = f" ({ct})" if ct else ""
+                dur_str = f" (durasi: {dur})" if dur else ""
+                wos_formatted.append(f"■ {inc} [{st}]{ct_str} - {t}{dur_str}")
+                
+            ticket_block = "\n".join(wos_formatted)
+            ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
+            msg += f"```\n{ticket_block_escaped}\n```\n"
             if len(open_tickets) > 15:
                 msg += f"_\\+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
         else:
