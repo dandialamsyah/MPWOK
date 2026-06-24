@@ -118,7 +118,7 @@ def handle_rekap(message):
 @bot.message_handler(commands=['rekap_sta'])
 def handle_rekap_sta(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    safe_reply_to(message, fetch_rekap_data(sheet_name="insera 19"), parse_mode="MarkdownV2")
+    safe_reply_to(message, fetch_rekap_data(sheet_name="sta"), parse_mode="MarkdownV2")
 
 @bot.message_handler(commands=['cek_open'])
 def handle_cek_open(message):
@@ -128,7 +128,7 @@ def handle_cek_open(message):
 @bot.message_handler(commands=['cek_open_sta'])
 def handle_cek_open_sta(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="insera 19"), parse_mode="MarkdownV2")
+    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="sta"), parse_mode="MarkdownV2")
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
@@ -143,7 +143,7 @@ def handle_callback_queries(call):
         
     elif call.data == "btn_rekap_sta":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        safe_send_message(call.message.chat.id, fetch_rekap_data(sheet_name="insera 19"), parse_mode="MarkdownV2")
+        safe_send_message(call.message.chat.id, fetch_rekap_data(sheet_name="sta"), parse_mode="MarkdownV2")
         
     elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')
@@ -151,7 +151,7 @@ def handle_callback_queries(call):
         
     elif call.data == "btn_cek_open_sta":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="insera 19"), parse_mode="MarkdownV2")
+        safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="sta"), parse_mode="MarkdownV2")
         
     elif call.data == "btn_id":
         chat_id = call.message.chat.id
