@@ -5,7 +5,7 @@ import telebot
 from google import genai
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID
-from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data
+from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data
 
 # Inisialisasi Client Gemini API
 client = None
@@ -33,6 +33,7 @@ try:
         telebot.types.BotCommand("cek_open_sta", "Memeriksa gangguan STA yang masih OPEN"),
         telebot.types.BotCommand("rekap_unspacsta", "Melihat rekap gangguan UNSPEC STA berkala"),
         telebot.types.BotCommand("unspacsta", "Memeriksa gangguan UNSPEC STA yang masih OPEN"),
+        telebot.types.BotCommand("psb", "Melihat rekap data PSB berkala"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
 except Exception as e:
@@ -53,7 +54,10 @@ def get_main_menu_keyboard():
         telebot.types.InlineKeyboardButton("📊 Rekap Unspac STA", callback_data="btn_rekap_unspacsta"),
         telebot.types.InlineKeyboardButton("🔔 Cek Open Unspac STA", callback_data="btn_cek_open_unspacsta")
     )
-    markup.row(telebot.types.InlineKeyboardButton("🆔 Cek ID Chat", callback_data="btn_id"))
+    markup.row(
+        telebot.types.InlineKeyboardButton("📊 Rekap PSB", callback_data="btn_rekap_psb"),
+        telebot.types.InlineKeyboardButton("🆔 Cek ID Chat", callback_data="btn_id")
+    )
     return markup
 
 
@@ -146,6 +150,11 @@ def handle_unspacsta(message):
     bot.send_chat_action(message.chat.id, 'typing')
     safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="UNDSEPC STA"), parse_mode="MarkdownV2")
 
+@bot.message_handler(commands=['PSB', 'psb'])
+def handle_psb(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_psb_data(), parse_mode="MarkdownV2")
+
 # ==================== CALLBACK QUERY HANDLER ====================
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -164,6 +173,10 @@ def handle_callback_queries(call):
     elif call.data == "btn_rekap_unspacsta":
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_rekap_data(sheet_name="UNDSEPC STA"), parse_mode="MarkdownV2")
+        
+    elif call.data == "btn_rekap_psb":
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        safe_send_message(call.message.chat.id, fetch_psb_data(), parse_mode="MarkdownV2")
         
     elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')

@@ -518,3 +518,111 @@ def fetch_rekap_data(sheet_name=None):
         return msg
     except Exception as e:
         return f"❌ *Error Rekap:* {escape_md(str(e))}"
+
+def fetch_psb_data():
+    try:
+        rows = get_sheet_rows("PSB")
+        if not rows or len(rows) < 2: 
+            return "Data Sheet PSB Kosong"
+        
+        header = [str(h).strip().upper() for h in rows[0]]
+        
+        # Find indices robustly
+        idx_sto = header.index('STO') if 'STO' in header else -1
+        idx_akom = header.index('AKOM') if 'AKOM' in header else -1
+        idx_vakstar = header.index('VAKSTAR') if 'VAKSTAR' in header else -1
+        
+        idx_pic = -1
+        for i, h in enumerate(header):
+            if h.startswith('PIC'):
+                idx_pic = i
+                break
+                
+        if idx_sto == -1 or idx_akom == -1 or idx_vakstar == -1 or idx_pic == -1:
+            return r"❌ Struktur kolom Sheet PSB tidak sesuai\. Pastikan terdapat kolom STO, akom, vakstar, dan PIC\."
+            
+        sto_list = []
+        pic_summary = {}
+        total_akom = 0
+        total_vakstar = 0
+        
+        for row in rows[1:]:
+            if len(row) <= max(idx_sto, idx_akom, idx_vakstar, idx_pic):
+                continue
+                
+            sto = str(row[idx_sto]).strip()
+            if not sto:
+                continue
+                
+            try:
+                akom_val = int(row[idx_akom]) if row[idx_akom] else 0
+            except ValueError:
+                akom_val = 0
+                
+            try:
+                vakstar_val = int(row[idx_vakstar]) if row[idx_vakstar] else 0
+            except ValueError:
+                vakstar_val = 0
+                
+            pic = str(row[idx_pic]).strip() or "-"
+            
+            if akom_val > 0 or vakstar_val > 0:
+                sto_list.append({
+                    'sto': sto,
+                    'akom': akom_val,
+                    'vakstar': vakstar_val,
+                    'pic': pic
+                })
+                
+            pic_key = pic.upper()
+            if pic_key != "-":
+                if pic_key not in pic_summary:
+                    pic_summary[pic_key] = {'name': pic, 'akom': 0, 'vakstar': 0}
+                pic_summary[pic_key]['akom'] += akom_val
+                pic_summary[pic_key]['vakstar'] += vakstar_val
+                
+            total_akom += akom_val
+            total_vakstar += vakstar_val
+            
+        msg = "📊 *REKAP DATA PSB \\(PASANG SAMBUNGAN BARU\\)*\n"
+        msg += "```\n"
+        msg += "PIC        | AKOM | VAKSTAR | TOTAL\n"
+        msg += "-----------|------|---------|------\n"
+        
+        sorted_pics = sorted(pic_summary.values(), key=lambda x: x['name'].upper())
+        for p in sorted_pics:
+            p_total = p['akom'] + p['vakstar']
+            if p_total > 0:
+                short_name = get_short_name(p['name']).ljust(10)
+                msg += f"{short_name} | {str(p['akom']).rjust(4)} | {str(p['vakstar']).rjust(7)} | {str(p_total).rjust(5)}\n"
+                
+        msg += "-----------|------|---------|------\n"
+        grand_total = total_akom + total_vakstar
+        msg += f"{'TOTAL'.ljust(10)} | {str(total_akom).rjust(4)} | {str(total_vakstar).rjust(7)} | {str(grand_total).rjust(5)}\n"
+        msg += "```\n"
+        
+        msg += "📍 *Ringkasan PSB:*\n"
+        msg += f"🔴 *Total Akom* : {total_akom} Order\n"
+        msg += f"🟢 *Total Vakstar* : {total_vakstar} Order\n\n"
+        
+        if sto_list:
+            msg += "⚠️ *Detail Order Aktif per STO:*\n"
+            detail_lines = []
+            for item in sto_list:
+                parts = []
+                if item['akom'] > 0:
+                    parts.append(f"akom: {item['akom']}")
+                if item['vakstar'] > 0:
+                    parts.append(f"vakstar: {item['vakstar']}")
+                detail_lines.append(f"■ {item['sto']} ({', '.join(parts)}) - {item['pic']}")
+                
+            ticket_block = "\n".join(detail_lines)
+            ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
+            msg += f"```\n{ticket_block_escaped}\n```\n"
+        else:
+            msg += "✅ *Tidak ada order aktif (Semua Nihil)*\n"
+            
+        return msg
+    except Exception as e:
+        return f"❌ *Error Rekap PSB:* {escape_md(str(e))}"
+
