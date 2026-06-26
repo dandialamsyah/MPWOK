@@ -130,6 +130,17 @@ try:
 except Exception as e:
     logging.warning(f"Inisialisasi awal Google Sheets gagal: {e}")
 
+def preprocess_sheet_rows(rows):
+    if not rows:
+        return rows
+    for i, row in enumerate(rows):
+        row_upper = [str(cell).upper().strip() for cell in row]
+        has_status = any(s_col in row_upper for s_col in ['STATUS', 'STATE'])
+        has_incident = any(i_col in row_upper for i_col in ['INCIDENT', 'WONUM', 'TICKET ID', 'NO TIKET'])
+        if has_status and has_incident:
+            return rows[i:]
+    return rows
+
 # Caching Google Sheets
 _cached_rows_dict = {}
 _cache_time_dict = {}
@@ -149,6 +160,7 @@ def get_sheet_rows(sheet_name=None):
         ws = get_worksheet(sheet_name)
         logging.info(f"Mengambil data segar dari Google Sheets ({cache_key})...")
         rows = ws.get_all_values()
+        rows = preprocess_sheet_rows(rows)
         _cached_rows_dict[cache_key] = rows
         _cache_time_dict[cache_key] = current_time
         return rows
@@ -160,6 +172,7 @@ def get_sheet_rows(sheet_name=None):
         try:
             ws = get_worksheet(sheet_name)
             rows = ws.get_all_values()
+            rows = preprocess_sheet_rows(rows)
             _cached_rows_dict[cache_key] = rows
             _cache_time_dict[cache_key] = current_time
             return rows
@@ -354,7 +367,13 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
         
         ai_msg = get_ai_reminder_message(client, model_id)
 
-        prefix = "*\\(STA\\)* " if sheet_name else ""
+        if sheet_name:
+            if sheet_name.strip().lower() == "sta":
+                prefix = "*\\(STA\\)* "
+            else:
+                prefix = f"*\\({escape_md(sheet_name)}\\)* "
+        else:
+            prefix = ""
         msg = f"🔔 {prefix}*{ai_msg}*\n\n"
         for tag, tickets in alerts.items():
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
@@ -425,7 +444,13 @@ def fetch_rekap_data(sheet_name=None):
  
         sorted_teams = sorted(pivot.items(), key=lambda x: x[0])
  
-        title_tag = " STA" if sheet_name else ""
+        if sheet_name:
+            if sheet_name.strip().lower() == "sta":
+                title_tag = " STA"
+            else:
+                title_tag = f" {escape_md(sheet_name)}"
+        else:
+            title_tag = ""
         msg = f"📊 *REKAP GANGGUAN MPW{title_tag} \\(OPEN & CLOSED\\)*\n"
         msg += "```\n"
         msg += "TEKNISI    | OPEN | CLOSED | TOTAL\n"
