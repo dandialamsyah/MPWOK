@@ -72,6 +72,7 @@ Untuk menjaga bot Anda tetap menyala tanpa perlu menghidupkan komputer lokal:
    * `BOT_TOKEN` = *(Token bot Telegram)*
    * `GEMINI_KEY` = *(API Key Gemini)*
    * `SHEET_NAME` = *(Nama Google Sheet Anda)*
-   * `GROUP_ID` = *(ID Grup Telegram Anda)*
+   * `GROUP_ID` = *(ID Grup Telegram MPW Anda)*
+   * `GROUP_ID_STA` = *(ID Grup Telegram STA Anda)*
    * `GOOGLE_CREDENTIALS` = *(Buka berkas `credentials.json` Anda, salin seluruh isi teks JSON di dalamnya, dan tempel/paste di kolom Value variabel ini)*
 5. Klik **Save**. Railway akan memuat ulang dan mendeploy bot Anda secara otomatis.

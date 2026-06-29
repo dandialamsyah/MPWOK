@@ -283,13 +283,11 @@ def run_scheduler():
                             logging.error(f"Gagal mengirim tiket urgent STA saat startup: {e}")
                             
                     # Jika saat startup jam saat ini pas dengan jam penjadwalan, set agar tidak mengirim ganda
-                    if (current_hour - 6) % 2 == 0:
-                        last_sent_hour = current_hour
+                    last_sent_hour = current_hour
             
             # Cek apakah jam masuk dalam rentang 06:00 - 19:00 WIB
-            # Dan selisih jam dari jam 06:00 adalah kelipatan 2 (yaitu jam 06, 08, 10, 12, 14, 16, 18)
             # Serta berada pada menit ke 0 (toleransi menit 0-4)
-            if 6 <= current_hour <= 19 and (current_hour - 6) % 2 == 0:
+            if 6 <= current_hour <= 19:
                 if 0 <= current_minute < 5 and last_sent_hour != current_hour:
                     logging.info(f"Waktu penjadwalan tercapai: {now.strftime('%H:%M')} WIB. Memeriksa tiket urgent...")
                     
