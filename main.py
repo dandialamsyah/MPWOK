@@ -231,6 +231,7 @@ def handle_callback_queries(call):
 def run_scheduler():
     logging.info("Background scheduler thread started...")
     last_sent_hour = -1
+    first_run = True
     
     while True:
         try:
@@ -240,6 +241,24 @@ def run_scheduler():
             
             current_hour = now.hour
             current_minute = now.minute
+            
+            # Jalankan langsung saat startup jika berada dalam rentang waktu operasional (06:00 - 19:00 WIB)
+            if first_run:
+                first_run = False
+                if 6 <= current_hour <= 19:
+                    logging.info("Menjalankan pengiriman pertama saat startup...")
+                    if GROUP_ID:
+                        open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
+                        if open_tickets:
+                            logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan pertama ke grup...")
+                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
+                            safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
+                            logging.info("Laporan tiket urgent pertama berhasil dikirim.")
+                        else:
+                            logging.info("Tidak ada tiket urgent open saat startup, pengiriman dilewati.")
+                    # Jika saat startup jam saat ini pas dengan jam penjadwalan, set agar tidak mengirim ganda
+                    if (current_hour - 6) % 2 == 0:
+                        last_sent_hour = current_hour
             
             # Cek apakah jam masuk dalam rentang 06:00 - 19:00 WIB
             # Dan selisih jam dari jam 06:00 adalah kelipatan 2 (yaitu jam 06, 08, 10, 12, 14, 16, 18)
@@ -266,6 +285,7 @@ def run_scheduler():
             logging.error(f"Error pada background scheduler: {e}")
             
         time.sleep(30) # Cek setiap 30 detik
+
 
 # ==================== MAIN PROGRAM ====================
 
