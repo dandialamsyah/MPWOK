@@ -50,6 +50,17 @@ if group_id_env:
 else:
     GROUP_ID = None
 
+# Parse GROUP_ID_STA secara aman
+group_id_sta_env = strip_quotes(os.getenv("GROUP_ID_STA"))
+if group_id_sta_env:
+    try:
+        GROUP_ID_STA = int(group_id_sta_env)
+    except ValueError:
+        logging.warning("Format GROUP_ID_STA tidak valid (harus berupa angka/integer).")
+        GROUP_ID_STA = None
+else:
+    GROUP_ID_STA = None
+
 # ==================== KATEGORI STATUS ====================
 KATEGORI_CLOSED = ['CLOSE', 'CLOSED']
 # Jika ada status selain closed, akan dikategorikan sebagai OPEN secara fallback.

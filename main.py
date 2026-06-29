@@ -7,7 +7,7 @@ import threading
 import time
 from datetime import datetime, timezone, timedelta
 
-from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID
+from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA
 from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data
 
 # Inisialisasi Client Gemini API
@@ -38,6 +38,7 @@ try:
         telebot.types.BotCommand("unspacsta", "Memeriksa gangguan UNSPEC STA yang masih OPEN"),
         telebot.types.BotCommand("rekap_urgent", "Melihat rekap gangguan URGENT berkala"),
         telebot.types.BotCommand("urgent", "Memeriksa gangguan URGENT yang masih OPEN"),
+        telebot.types.BotCommand("urgentsta", "Memeriksa gangguan URGENT STA yang masih OPEN"),
         telebot.types.BotCommand("psb", "Melihat rekap data PSB berkala"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
@@ -174,6 +175,11 @@ def handle_rekap_urgent(message):
     bot.send_chat_action(message.chat.id, 'typing')
     safe_reply_to(message, fetch_rekap_data(sheet_name="TIKET URGENT MPW"), parse_mode="MarkdownV2")
 
+@bot.message_handler(commands=['urgentsta'])
+def handle_urgentsta(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA"), parse_mode="MarkdownV2")
+
 # ==================== CALLBACK QUERY HANDLER ====================
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -247,15 +253,35 @@ def run_scheduler():
                 first_run = False
                 if 6 <= current_hour <= 19:
                     logging.info("Menjalankan pengiriman pertama saat startup...")
+                    
+                    # 1. TIKET URGENT MPW
                     if GROUP_ID:
-                        open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
-                        if open_tickets:
-                            logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan pertama ke grup...")
-                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
-                            safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
-                            logging.info("Laporan tiket urgent pertama berhasil dikirim.")
-                        else:
-                            logging.info("Tidak ada tiket urgent open saat startup, pengiriman dilewati.")
+                        try:
+                            open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
+                            if open_tickets:
+                                logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan pertama ke grup MPW...")
+                                report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
+                                safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
+                                logging.info("Laporan tiket urgent MPW pertama berhasil dikirim.")
+                            else:
+                                logging.info("Tidak ada tiket urgent MPW open saat startup, pengiriman dilewati.")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim tiket urgent MPW saat startup: {e}")
+                    
+                    # 2. TIKET URGENT STA
+                    if GROUP_ID_STA:
+                        try:
+                            open_tickets_sta = get_open_tickets_data(sheet_name="TIKET URGENT STA")
+                            if open_tickets_sta:
+                                logging.info(f"Menemukan {len(open_tickets_sta)} tiket urgent STA open. Mengirim laporan pertama ke grup STA...")
+                                report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA")
+                                safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
+                                logging.info("Laporan tiket urgent STA pertama berhasil dikirim.")
+                            else:
+                                logging.info("Tidak ada tiket urgent STA open saat startup, pengiriman dilewati.")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim tiket urgent STA saat startup: {e}")
+                            
                     # Jika saat startup jam saat ini pas dengan jam penjadwalan, set agar tidak mengirim ganda
                     if (current_hour - 6) % 2 == 0:
                         last_sent_hour = current_hour
@@ -267,18 +293,37 @@ def run_scheduler():
                 if 0 <= current_minute < 5 and last_sent_hour != current_hour:
                     logging.info(f"Waktu penjadwalan tercapai: {now.strftime('%H:%M')} WIB. Memeriksa tiket urgent...")
                     
+                    # 1. TIKET URGENT MPW
                     if GROUP_ID:
-                        # Periksa apakah ada tiket open sebelum mengirim
-                        open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
-                        if open_tickets:
-                            logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan ke grup...")
-                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
-                            safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
-                            logging.info("Laporan tiket urgent berhasil dikirim ke grup.")
-                        else:
-                            logging.info("Tidak ada tiket urgent open, pengiriman otomatis dilewati.")
+                        try:
+                            open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
+                            if open_tickets:
+                                logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan ke grup MPW...")
+                                report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
+                                safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
+                                logging.info("Laporan tiket urgent MPW berhasil dikirim.")
+                            else:
+                                logging.info("Tidak ada tiket urgent MPW open, pengiriman otomatis dilewati.")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim laporan terjadwal tiket urgent MPW: {e}")
                     else:
-                        logging.warning("Gagal mengirim laporan terjadwal: GROUP_ID tidak dikonfigurasi di .env")
+                        logging.warning("Fitur terjadwal MPW dilewati: GROUP_ID tidak dikonfigurasi di .env")
+                        
+                    # 2. TIKET URGENT STA
+                    if GROUP_ID_STA:
+                        try:
+                            open_tickets_sta = get_open_tickets_data(sheet_name="TIKET URGENT STA")
+                            if open_tickets_sta:
+                                logging.info(f"Menemukan {len(open_tickets_sta)} tiket urgent STA open. Mengirim laporan ke grup STA...")
+                                report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA")
+                                safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
+                                logging.info("Laporan tiket urgent STA berhasil dikirim.")
+                            else:
+                                logging.info("Tidak ada tiket urgent STA open, pengiriman otomatis dilewati.")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim laporan terjadwal tiket urgent STA: {e}")
+                    else:
+                        logging.warning("Fitur terjadwal STA dilewati: GROUP_ID_STA tidak dikonfigurasi di .env")
                     
                     last_sent_hour = current_hour
         except Exception as e:
@@ -292,13 +337,13 @@ def run_scheduler():
 if __name__ == "__main__":
     logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
     
-    # Jalankan background scheduler jika GROUP_ID tersedia
-    if GROUP_ID:
+    # Jalankan background scheduler jika GROUP_ID atau GROUP_ID_STA tersedia
+    if GROUP_ID or GROUP_ID_STA:
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
         logging.info("Scheduler thread for urgent tickets launched successfully.")
     else:
-        logging.warning("GROUP_ID tidak terdeteksi di .env. Fitur kirim terjadwal urgent dinonaktifkan.")
+        logging.warning("GROUP_ID dan GROUP_ID_STA tidak terdeteksi di .env. Fitur kirim terjadwal urgent dinonaktifkan.")
         
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
