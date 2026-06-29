@@ -314,19 +314,20 @@ def get_priority_rank(cust_type):
     else:
         return 4
 
-def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
+def get_open_tickets_data(sheet_name=None):
     try:
         rows = get_sheet_rows(sheet_name)
-        if not rows or len(rows) < 2: return "Data Sheet Kosong"
+        if not rows or len(rows) < 2: return []
         
         header = [str(h).upper().strip() for h in rows[0]]
         idx_status, idx_team, idx_incident, idx_device, idx_cust_type = resolve_headers(header)
         idx_jam_open = resolve_jam_open(header)
         
         if idx_status == -1 or idx_team == -1 or idx_incident == -1:
-            return r"❌ Struktur kolom Sheet tidak sesuai\. Pastikan terdapat kolom STATUS, TEAM/TEKNISI, dan INCIDENT/WONUM\."
+            logging.error(f"Struktur kolom Sheet '{sheet_name}' tidak sesuai.")
+            return []
             
-        alerts = {}
+        tickets = []
         for row in rows[1:]:
             if len(row) <= max(idx_status, idx_team, idx_incident):
                 continue
@@ -338,9 +339,6 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
             
             # Jika status tidak closed
             if not any(x in status_raw for x in KATEGORI_CLOSED):
-                tags = get_team_tags(team_raw)
-                if not tags: continue
-                
                 device_val = row[idx_device] if idx_device != -1 and len(row) > idx_device else ""
                 cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
                 
@@ -351,14 +349,34 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
                     if dt_open:
                         duration_str = calculate_duration_str(dt_open)
                 
-                if tags not in alerts: alerts[tags] = []
-                alerts[tags].append({
+                tickets.append({
                     'incident': incident,
                     'status': status_raw,
+                    'team': team_raw,
                     'device': device_val,
                     'cust_type': cust_type,
                     'duration': duration_str
                 })
+        return tickets
+    except Exception as e:
+        logging.error(f"Error get_open_tickets_data: {e}")
+        return []
+
+def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
+    try:
+        tickets = get_open_tickets_data(sheet_name)
+        if not tickets:
+            if sheet_name:
+                return f"✅ *Semua tiket gangguan {escape_md(sheet_name)} sudah CLOSED\\!*"
+            return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
+            
+        alerts = {}
+        for t in tickets:
+            tags = get_team_tags(t['team'])
+            if not tags: continue
+            
+            if tags not in alerts: alerts[tags] = []
+            alerts[tags].append(t)
                 
         if not alerts:
             if sheet_name:
@@ -375,12 +393,12 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
         else:
             prefix = ""
         msg = f"🔔 {prefix}*{ai_msg}*\n\n"
-        for tag, tickets in alerts.items():
+        for tag, tkts in alerts.items():
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
-            tickets.sort(key=lambda x: get_priority_rank(x['cust_type']))
+            tkts.sort(key=lambda x: get_priority_rank(x['cust_type']))
             
             wos_formatted = []
-            for t in tickets:
+            for t in tkts:
                 device_str = f" - {t['device']}" if t['device'] else ""
                 type_str = f" ({t['cust_type']})" if t['cust_type'] else ""
                 dur_str = f" (durasi: {t['duration']})" if t['duration'] else ""

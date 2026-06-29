@@ -3,9 +3,12 @@ import logging
 import telebot
 # pyrefly: ignore [missing-import]
 from google import genai
+import threading
+import time
+from datetime import datetime, timezone, timedelta
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID
-from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data
+from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data
 
 # Inisialisasi Client Gemini API
 client = None
@@ -33,6 +36,8 @@ try:
         telebot.types.BotCommand("cek_open_sta", "Memeriksa gangguan STA yang masih OPEN"),
         telebot.types.BotCommand("rekap_unspacsta", "Melihat rekap gangguan UNSPEC STA berkala"),
         telebot.types.BotCommand("unspacsta", "Memeriksa gangguan UNSPEC STA yang masih OPEN"),
+        telebot.types.BotCommand("rekap_urgent", "Melihat rekap gangguan URGENT berkala"),
+        telebot.types.BotCommand("urgent", "Memeriksa gangguan URGENT yang masih OPEN"),
         telebot.types.BotCommand("psb", "Melihat rekap data PSB berkala"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
@@ -53,6 +58,10 @@ def get_main_menu_keyboard():
     markup.row(
         telebot.types.InlineKeyboardButton("📊 Rekap Unspac STA", callback_data="btn_rekap_unspacsta"),
         telebot.types.InlineKeyboardButton("🔔 Cek Open Unspac STA", callback_data="btn_cek_open_unspacsta")
+    )
+    markup.row(
+        telebot.types.InlineKeyboardButton("🚨 Rekap Urgent", callback_data="btn_rekap_urgent"),
+        telebot.types.InlineKeyboardButton("🚨 Cek Open Urgent", callback_data="btn_cek_open_urgent")
     )
     markup.row(
         telebot.types.InlineKeyboardButton("📊 Rekap PSB", callback_data="btn_rekap_psb"),
@@ -155,6 +164,16 @@ def handle_psb(message):
     bot.send_chat_action(message.chat.id, 'typing')
     safe_reply_to(message, fetch_psb_data(), parse_mode="MarkdownV2")
 
+@bot.message_handler(commands=['urgent'])
+def handle_urgent(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW"), parse_mode="MarkdownV2")
+
+@bot.message_handler(commands=['rekap_urgent'])
+def handle_rekap_urgent(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    safe_reply_to(message, fetch_rekap_data(sheet_name="TIKET URGENT MPW"), parse_mode="MarkdownV2")
+
 # ==================== CALLBACK QUERY HANDLER ====================
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -178,6 +197,10 @@ def handle_callback_queries(call):
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_psb_data(), parse_mode="MarkdownV2")
         
+    elif call.data == "btn_rekap_urgent":
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        safe_send_message(call.message.chat.id, fetch_rekap_data(sheet_name="TIKET URGENT MPW"), parse_mode="MarkdownV2")
+        
     elif call.data == "btn_cek_open":
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID), parse_mode="MarkdownV2")
@@ -190,6 +213,10 @@ def handle_callback_queries(call):
         bot.send_chat_action(call.message.chat.id, 'typing')
         safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="UNDSEPC STA"), parse_mode="MarkdownV2")
         
+    elif call.data == "btn_cek_open_urgent":
+        bot.send_chat_action(call.message.chat.id, 'typing')
+        safe_send_message(call.message.chat.id, fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW"), parse_mode="MarkdownV2")
+        
     elif call.data == "btn_id":
         chat_id = call.message.chat.id
         chat_type = call.message.chat.type
@@ -201,10 +228,57 @@ def handle_callback_queries(call):
         )
         safe_send_message(call.message.chat.id, msg, parse_mode="MarkdownV2")
 
+def run_scheduler():
+    logging.info("Background scheduler thread started...")
+    last_sent_hour = -1
+    
+    while True:
+        try:
+            # Dapatkan waktu saat ini di WIB (UTC+7)
+            tz_wib = timezone(timedelta(hours=7))
+            now = datetime.now(tz_wib)
+            
+            current_hour = now.hour
+            current_minute = now.minute
+            
+            # Cek apakah jam masuk dalam rentang 06:00 - 19:00 WIB
+            # Dan selisih jam dari jam 06:00 adalah kelipatan 2 (yaitu jam 06, 08, 10, 12, 14, 16, 18)
+            # Serta berada pada menit ke 0 (toleransi menit 0-4)
+            if 6 <= current_hour <= 19 and (current_hour - 6) % 2 == 0:
+                if 0 <= current_minute < 5 and last_sent_hour != current_hour:
+                    logging.info(f"Waktu penjadwalan tercapai: {now.strftime('%H:%M')} WIB. Memeriksa tiket urgent...")
+                    
+                    if GROUP_ID:
+                        # Periksa apakah ada tiket open sebelum mengirim
+                        open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
+                        if open_tickets:
+                            logging.info(f"Menemukan {len(open_tickets)} tiket urgent open. Mengirim laporan ke grup...")
+                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW")
+                            safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
+                            logging.info("Laporan tiket urgent berhasil dikirim ke grup.")
+                        else:
+                            logging.info("Tidak ada tiket urgent open, pengiriman otomatis dilewati.")
+                    else:
+                        logging.warning("Gagal mengirim laporan terjadwal: GROUP_ID tidak dikonfigurasi di .env")
+                    
+                    last_sent_hour = current_hour
+        except Exception as e:
+            logging.error(f"Error pada background scheduler: {e}")
+            
+        time.sleep(30) # Cek setiap 30 detik
+
 # ==================== MAIN PROGRAM ====================
 
 if __name__ == "__main__":
     logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
     
+    # Jalankan background scheduler jika GROUP_ID tersedia
+    if GROUP_ID:
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        logging.info("Scheduler thread for urgent tickets launched successfully.")
+    else:
+        logging.warning("GROUP_ID tidak terdeteksi di .env. Fitur kirim terjadwal urgent dinonaktifkan.")
+        
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
