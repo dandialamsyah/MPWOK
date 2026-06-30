@@ -288,7 +288,7 @@ def run_scheduler():
             # Cek apakah jam masuk dalam rentang 06:00 - 19:00 WIB
             # Serta berada pada menit ke 0 (toleransi menit 0-4)
             if 6 <= current_hour <= 19:
-                if 0 <= current_minute < 5 and last_sent_hour != current_hour:
+                if 0 <= current_minute < 5 and last_sent_hour != current_hour and current_hour % 2 == 0:
                     logging.info(f"Waktu penjadwalan tercapai: {now.strftime('%H:%M')} WIB. Memeriksa tiket urgent...")
                     
                     # 1. TIKET URGENT MPW
