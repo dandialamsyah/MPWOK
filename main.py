@@ -236,8 +236,10 @@ def handle_callback_queries(call):
 
 def run_scheduler():
     logging.info("Background scheduler thread started...")
-    last_rekap_time = None
-    first_run = True
+    last_rekap_time_mpw = None
+    last_rekap_time_sta = None
+    first_run_mpw = True
+    first_run_sta = True
     
     # In-memory tracking of alerted tickets to prevent spamming
     alerted_ticket_ids_mpw = set()
@@ -263,7 +265,7 @@ def run_scheduler():
                         open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
                         
                         # Inisialisasi set di startup pertama agar tidak mengirim ulang tiket yang sudah open sebelumnya
-                        if first_run:
+                        if first_run_mpw:
                             alerted_ticket_ids_mpw = {t['incident'] for t in open_tickets}
                         
                         # Cari tiket baru yang belum pernah di-alert
@@ -290,7 +292,7 @@ def run_scheduler():
                         open_tickets_sta = get_open_tickets_data(sheet_name="TIKET URGENT STA")
                         
                         # Inisialisasi set di startup pertama
-                        if first_run:
+                        if first_run_sta:
                             alerted_ticket_ids_sta = {t['incident'] for t in open_tickets_sta}
                         
                         # Cari tiket baru
@@ -310,10 +312,11 @@ def run_scheduler():
                     except Exception as e:
                         logging.error(f"Gagal memproses tiket urgent STA real-time: {e}")
                 
+                # --- JADWAL REKAP BERKALA TIMING MPW ---
                 # Jalankan langsung pengiriman seluruh tiket open saat startup
-                if first_run:
-                    first_run = False
-                    logging.info("Menjalankan pengiriman pertama saat startup...")
+                if first_run_mpw:
+                    first_run_mpw = False
+                    logging.info("Menjalankan pengiriman pertama MPW saat startup...")
                     
                     if GROUP_ID and open_tickets:
                         try:
@@ -323,19 +326,11 @@ def run_scheduler():
                         except Exception as e:
                             logging.error(f"Gagal mengirim rekap startup MPW: {e}")
                             
-                    if GROUP_ID_STA and open_tickets_sta:
-                        try:
-                            logging.info(f"Mengirim laporan startup {len(open_tickets_sta)} tiket urgent STA open ke grup STA...")
-                            report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=open_tickets_sta)
-                            safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
-                        except Exception as e:
-                            logging.error(f"Gagal mengirim rekap startup STA: {e}")
-                            
-                    last_rekap_time = now
+                    last_rekap_time_mpw = now
                 
                 # Pengiriman rekap terjadwal setiap 1.5 jam (90 menit)
-                elif last_rekap_time is None or (now - last_rekap_time) >= timedelta(minutes=90):
-                    logging.info(f"Waktu penjadwalan berkala (1.5 jam) tercapai: {now.strftime('%H:%M')} WIB. Memeriksa tiket urgent...")
+                elif last_rekap_time_mpw is None or (now - last_rekap_time_mpw) >= timedelta(minutes=90):
+                    logging.info(f"Waktu penjadwalan berkala MPW (1.5 jam) tercapai: {now.strftime('%H:%M')} WIB.")
                     
                     if GROUP_ID:
                         try:
@@ -348,6 +343,19 @@ def run_scheduler():
                         except Exception as e:
                             logging.error(f"Gagal mengirim rekap berkala MPW: {e}")
                             
+                    last_rekap_time_mpw = now
+                
+                # --- JADWAL REKAP BERKALA TIMING STA (OFFSET 10 MENIT) ---
+                # Jadwalkan agar berjalan 10 menit setelah startup pertama
+                if first_run_sta:
+                    first_run_sta = False
+                    logging.info("Menjadwalkan pengiriman pertama STA 10 menit setelah startup...")
+                    last_rekap_time_sta = now - timedelta(minutes=80) # offset agar run berikutnya tepat 10 menit lagi
+                
+                # Pengiriman rekap terjadwal STA setiap 1.5 jam (90 menit)
+                elif last_rekap_time_sta is None or (now - last_rekap_time_sta) >= timedelta(minutes=90):
+                    logging.info(f"Waktu penjadwalan berkala STA (1.5 jam) tercapai: {now.strftime('%H:%M')} WIB.")
+                    
                     if GROUP_ID_STA:
                         try:
                             if open_tickets_sta:
@@ -359,14 +367,16 @@ def run_scheduler():
                         except Exception as e:
                             logging.error(f"Gagal mengirim rekap berkala STA: {e}")
                             
-                    last_rekap_time = now
+                    last_rekap_time_sta = now
                     
             else:
-                # Di luar jam operasional, reset first_run = True agar langsung mengirim rekap saat masuk jam operasional
-                if not first_run:
-                    logging.info("Di luar jam operasional. Resetting first_run flag.")
-                    first_run = True
-                    last_rekap_time = None
+                # Di luar jam operasional, reset agar langsung mengirim rekap saat masuk jam operasional
+                if not first_run_mpw or not first_run_sta:
+                    logging.info("Di luar jam operasional. Resetting scheduler flags.")
+                    first_run_mpw = True
+                    first_run_sta = True
+                    last_rekap_time_mpw = None
+                    last_rekap_time_sta = None
                     
         except Exception as e:
             logging.error(f"Error pada background scheduler: {e}")
