@@ -362,10 +362,13 @@ def get_open_tickets_data(sheet_name=None):
         logging.error(f"Error get_open_tickets_data: {e}")
         return []
 
-def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
+def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None, tickets=None, is_new=False):
     try:
-        tickets = get_open_tickets_data(sheet_name)
+        if tickets is None:
+            tickets = get_open_tickets_data(sheet_name)
         if not tickets:
+            if is_new:
+                return ""
             if sheet_name:
                 return f"✅ *Semua tiket gangguan {escape_md(sheet_name)} sudah CLOSED\\!*"
             return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
@@ -379,14 +382,21 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None):
             alerts[tags].append(t)
                 
         if not alerts:
+            if is_new:
+                return ""
             if sheet_name:
                 return f"✅ *Semua tiket gangguan {escape_md(sheet_name)} sudah CLOSED\\!*"
             return "✅ *Semua tiket gangguan sudah CLOSED\\!*"
         
-        ai_msg = get_ai_reminder_message(client, model_id)
+        if is_new:
+            ai_msg = "Ada tiket URGENT baru masuk\\! Mohon segera direspon dan ditindaklanjuti\\!"
+        else:
+            ai_msg = get_ai_reminder_message(client, model_id)
 
         if sheet_name:
-            if sheet_name.strip().lower() == "sta":
+            if is_new:
+                prefix = f"*\\(BARU \\- {escape_md(sheet_name)}\\)* "
+            elif sheet_name.strip().lower() == "sta":
                 prefix = "*\\(STA\\)* "
             else:
                 prefix = f"*\\({escape_md(sheet_name)}\\)* "
