@@ -25,10 +25,13 @@ def parse_datetime(dt_str):
         return None
     dt_str = str(dt_str).strip()
     formats = [
+        "%Y-%m-%d %H:%M:%S.%f",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M:%S.%f",
         "%d/%m/%Y %H:%M:%S",
         "%d/%m/%Y %H:%M",
+        "%d-%m-%Y %H:%M:%S.%f",
         "%d-%m-%Y %H:%M:%S",
         "%d-%m-%Y %H:%M",
     ]
@@ -73,6 +76,45 @@ def calculate_duration_str(start_dt):
         parts.append(f"{minutes} menit")
         
     return " ".join(parts)
+
+def calculate_ttr_remaining_str(booking_dt_str):
+    if not booking_dt_str:
+        return ""
+    dt_booking = parse_datetime(booking_dt_str)
+    if not dt_booking:
+        return ""
+        
+    # target TTR = booking date + 2 jam
+    dt_ttr_limit = dt_booking + timedelta(hours=2)
+    
+    # Waktu sekarang di WIB
+    tz_wib = timezone(timedelta(hours=7))
+    now = datetime.now(tz_wib).replace(tzinfo=None)
+    
+    diff = dt_ttr_limit - now
+    total_seconds = diff.total_seconds()
+    
+    is_overdue = total_seconds < 0
+    abs_seconds = abs(total_seconds)
+    
+    days = int(abs_seconds // 86400)
+    hours = int((abs_seconds % 86400) // 3600)
+    minutes = int((abs_seconds % 3600) // 60)
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days} hari")
+    if hours > 0:
+        parts.append(f"{hours} jam")
+    if minutes > 0 or not parts:
+        parts.append(f"{minutes} menit")
+        
+    duration_str = " ".join(parts)
+    
+    if is_overdue:
+        return f"TTR lewat {duration_str}"
+    else:
+        return f"TTR sisa {duration_str}"
 
 def resolve_jam_open(header):
     for jo_col in ['JAM OPEN', 'REPORTED DATE', 'REPORTED_DATE']:
@@ -323,6 +365,12 @@ def get_open_tickets_data(sheet_name=None):
         idx_status, idx_team, idx_incident, idx_device, idx_cust_type = resolve_headers(header)
         idx_jam_open = resolve_jam_open(header)
         
+        idx_booking_date = -1
+        for b_col in ['BOOKING DATE', 'BOOKING_DATE', 'TGL BOOKING', 'TANGGAL BOOKING']:
+            if b_col in header:
+                idx_booking_date = header.index(b_col)
+                break
+        
         if idx_status == -1 or idx_team == -1 or idx_incident == -1:
             logging.error(f"Struktur kolom Sheet '{sheet_name}' tidak sesuai.")
             return []
@@ -341,6 +389,7 @@ def get_open_tickets_data(sheet_name=None):
             if not any(x in status_raw for x in KATEGORI_CLOSED):
                 device_val = row[idx_device] if idx_device != -1 and len(row) > idx_device else ""
                 cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
+                booking_date_val = row[idx_booking_date].strip() if idx_booking_date != -1 and len(row) > idx_booking_date else ""
                 
                 duration_str = ""
                 if idx_jam_open != -1 and len(row) > idx_jam_open:
@@ -355,7 +404,9 @@ def get_open_tickets_data(sheet_name=None):
                     'team': team_raw,
                     'device': device_val,
                     'cust_type': cust_type,
-                    'duration': duration_str
+                    'duration': duration_str,
+                    'booking_date': booking_date_val,
+                    'ttr_remaining': calculate_ttr_remaining_str(booking_date_val)
                 })
         return tickets
     except Exception as e:
@@ -412,7 +463,12 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None, ticket
                 device_str = f" - {t['device']}" if t['device'] else ""
                 type_str = f" ({t['cust_type']})" if t['cust_type'] else ""
                 dur_str = f" (durasi: {t['duration']})" if t['duration'] else ""
-                wos_formatted.append(f"■ {t['incident']} [{t['status']}]{type_str}{device_str}{dur_str}")
+                if t.get('booking_date'):
+                    ttr_str = f" - {t['ttr_remaining']}" if t.get('ttr_remaining') else ""
+                    booking_str = f" (booking: {t['booking_date']}{ttr_str})"
+                else:
+                    booking_str = ""
+                wos_formatted.append(f"■ {t['incident']} [{t['status']}]{type_str}{device_str}{dur_str}{booking_str}")
                 
             ticket_block = "\n".join(wos_formatted)
             ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
@@ -505,6 +561,12 @@ def fetch_rekap_data(sheet_name=None):
         msg += f"📈 *Resolution Rate* : {pct_str}%\n\n"
         
         idx_jam_open = resolve_jam_open(header)
+        idx_booking_date = -1
+        for b_col in ['BOOKING DATE', 'BOOKING_DATE', 'TGL BOOKING', 'TANGGAL BOOKING']:
+            if b_col in header:
+                idx_booking_date = header.index(b_col)
+                break
+                
         open_tickets = []
         for row in rows[1:]:
             if len(row) <= max(idx_status, idx_team, idx_incident):
@@ -513,6 +575,7 @@ def fetch_rekap_data(sheet_name=None):
             status_raw = str(row[idx_status]).upper().strip()
             team_raw = str(row[idx_team]).strip()
             cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
+            booking_date_val = row[idx_booking_date].strip() if idx_booking_date != -1 and len(row) > idx_booking_date else ""
             
             duration_str = ""
             if idx_jam_open != -1 and len(row) > idx_jam_open:
@@ -522,7 +585,8 @@ def fetch_rekap_data(sheet_name=None):
                     duration_str = calculate_duration_str(dt_open)
             
             if incident and not any(x in status_raw for x in KATEGORI_CLOSED):
-                open_tickets.append((incident, team_raw, status_raw, cust_type, duration_str))
+                ttr_val = calculate_ttr_remaining_str(booking_date_val)
+                open_tickets.append((incident, team_raw, status_raw, cust_type, duration_str, booking_date_val, ttr_val))
                 
         if open_tickets:
             # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
@@ -530,10 +594,15 @@ def fetch_rekap_data(sheet_name=None):
             
             msg += "⚠️ *Daftar Tiket PENDING / OPEN:*\n"
             wos_formatted = []
-            for inc, t, st, ct, dur in open_tickets[:15]:
+            for inc, t, st, ct, dur, bk, ttr in open_tickets[:15]:
                 ct_str = f" ({ct})" if ct else ""
                 dur_str = f" (durasi: {dur})" if dur else ""
-                wos_formatted.append(f"■ {inc} [{st}]{ct_str} - {t}{dur_str}")
+                if bk:
+                    ttr_str = f" - {ttr}" if ttr else ""
+                    bk_str = f" (booking: {bk}{ttr_str})"
+                else:
+                    bk_str = ""
+                wos_formatted.append(f"■ {inc} [{st}]{ct_str} - {t}{dur_str}{bk_str}")
                 
             ticket_block = "\n".join(wos_formatted)
             ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
