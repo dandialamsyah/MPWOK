@@ -470,7 +470,7 @@ def fetch_open_tickets_alert(client=None, model_id=None, sheet_name=None, ticket
                     booking_str = ""
                 wos_formatted.append(f"■ {t['incident']} [{t['status']}]{type_str}{device_str}{dur_str}{booking_str}")
                 
-            ticket_block = "\n".join(wos_formatted)
+            ticket_block = "\n\n\n".join(wos_formatted)
             ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
             msg += f"{tag}\n\n```\n{ticket_block_escaped}\n```\n\n"
         return msg
@@ -604,7 +604,7 @@ def fetch_rekap_data(sheet_name=None):
                     bk_str = ""
                 wos_formatted.append(f"■ {inc} [{st}]{ct_str} - {t}{dur_str}{bk_str}")
                 
-            ticket_block = "\n".join(wos_formatted)
+            ticket_block = "\n\n\n".join(wos_formatted)
             ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
             msg += f"```\n{ticket_block_escaped}\n```\n"
             if len(open_tickets) > 15:
