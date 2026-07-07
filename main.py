@@ -345,12 +345,21 @@ def run_scheduler():
                             
                     last_rekap_time_mpw = now
                 
-                # --- JADWAL REKAP BERKALA TIMING STA (OFFSET 10 MENIT) ---
-                # Jadwalkan agar berjalan 10 menit setelah startup pertama
+                # --- JADWAL REKAP BERKALA TIMING STA ---
+                # Jalankan langsung pengiriman seluruh tiket open saat startup
                 if first_run_sta:
                     first_run_sta = False
-                    logging.info("Menjadwalkan pengiriman pertama STA 10 menit setelah startup...")
-                    last_rekap_time_sta = now - timedelta(minutes=80) # offset agar run berikutnya tepat 10 menit lagi
+                    logging.info("Menjalankan pengiriman pertama STA saat startup...")
+                    
+                    if GROUP_ID_STA and open_tickets_sta:
+                        try:
+                            logging.info(f"Mengirim laporan startup {len(open_tickets_sta)} tiket urgent open ke grup STA...")
+                            report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=open_tickets_sta)
+                            safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim rekap startup STA: {e}")
+                            
+                    last_rekap_time_sta = now
                 
                 # Pengiriman rekap terjadwal STA setiap 1.5 jam (90 menit)
                 elif last_rekap_time_sta is None or (now - last_rekap_time_sta) >= timedelta(minutes=90):
@@ -359,7 +368,7 @@ def run_scheduler():
                     if GROUP_ID_STA:
                         try:
                             if open_tickets_sta:
-                                logging.info(f"Mengirim rekap berkala {len(open_tickets_sta)} tiket urgent STA open ke grup STA...")
+                                logging.info(f"Mengirim rekap berkala {len(open_tickets_sta)} tiket urgent open ke grup STA...")
                                 report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=open_tickets_sta)
                                 safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
                             else:
