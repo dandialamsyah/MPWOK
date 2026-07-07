@@ -241,10 +241,6 @@ def run_scheduler():
     first_run_mpw = True
     first_run_sta = True
     
-    # In-memory tracking of alerted tickets to prevent spamming
-    alerted_ticket_ids_mpw = set()
-    alerted_ticket_ids_sta = set()
-    
     while True:
         try:
             # Dapatkan waktu saat ini di WIB (UTC+7)
@@ -253,87 +249,31 @@ def run_scheduler():
             
             current_hour = now.hour
             
-            open_tickets = []
-            open_tickets_sta = []
-            
             # Rentang waktu operasional (06:00 - 19:00 WIB)
             if 6 <= current_hour <= 19:
                 
-                # 1. TIKET URGENT MPW
-                if GROUP_ID:
-                    try:
-                        open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
-                        
-                        # Inisialisasi set di startup pertama agar tidak mengirim ulang tiket yang sudah open sebelumnya
-                        if first_run_mpw:
-                            alerted_ticket_ids_mpw = {t['incident'] for t in open_tickets}
-                        
-                        # Cari tiket baru yang belum pernah di-alert
-                        new_tickets = [t for t in open_tickets if t['incident'] not in alerted_ticket_ids_mpw]
-                        if new_tickets:
-                            logging.info(f"Menemukan {len(new_tickets)} tiket urgent MPW baru. Mengirim alert instan...")
-                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW", tickets=new_tickets, is_new=True)
-                            if report:
-                                safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
-                                logging.info("Alert tiket urgent MPW baru berhasil dikirim.")
-                                # Tambahkan ke set yang sudah di-alert
-                                for t in new_tickets:
-                                    alerted_ticket_ids_mpw.add(t['incident'])
-                        
-                        # Sinkronisasi/bersihkan set dari tiket yang sudah diclose
-                        open_ids = {t['incident'] for t in open_tickets}
-                        alerted_ticket_ids_mpw = alerted_ticket_ids_mpw.intersection(open_ids)
-                    except Exception as e:
-                        logging.error(f"Gagal memproses tiket urgent MPW real-time: {e}")
-                
-                # 2. TIKET URGENT STA
-                if GROUP_ID_STA:
-                    try:
-                        open_tickets_sta = get_open_tickets_data(sheet_name="TIKET URGENT STA")
-                        
-                        # Inisialisasi set di startup pertama
-                        if first_run_sta:
-                            alerted_ticket_ids_sta = {t['incident'] for t in open_tickets_sta}
-                        
-                        # Cari tiket baru
-                        new_tickets_sta = [t for t in open_tickets_sta if t['incident'] not in alerted_ticket_ids_sta]
-                        if new_tickets_sta:
-                            logging.info(f"Menemukan {len(new_tickets_sta)} tiket urgent STA baru. Mengirim alert instan...")
-                            report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=new_tickets_sta, is_new=True)
-                            if report_sta:
-                                safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
-                                logging.info("Alert tiket urgent STA baru berhasil dikirim.")
-                                for t in new_tickets_sta:
-                                    alerted_ticket_ids_sta.add(t['incident'])
-                        
-                        # Sinkronisasi set
-                        open_ids_sta = {t['incident'] for t in open_tickets_sta}
-                        alerted_ticket_ids_sta = alerted_ticket_ids_sta.intersection(open_ids_sta)
-                    except Exception as e:
-                        logging.error(f"Gagal memproses tiket urgent STA real-time: {e}")
-                
-                # --- JADWAL REKAP BERKALA TIMING MPW ---
-                # Jalankan langsung pengiriman seluruh tiket open saat startup
+                # --- JADWAL REKAP BERKALA TIMING MPW (Setiap 60 menit) ---
                 if first_run_mpw:
                     first_run_mpw = False
                     logging.info("Menjalankan pengiriman pertama MPW saat startup...")
-                    
-                    if GROUP_ID and open_tickets:
-                        try:
-                            logging.info(f"Mengirim laporan startup {len(open_tickets)} tiket urgent open ke grup MPW...")
-                            report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW", tickets=open_tickets)
-                            safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
-                        except Exception as e:
-                            logging.error(f"Gagal mengirim rekap startup MPW: {e}")
-                            
-                    last_rekap_time_mpw = now
-                
-                # Pengiriman rekap terjadwal setiap 1.5 jam (90 menit)
-                elif last_rekap_time_mpw is None or (now - last_rekap_time_mpw) >= timedelta(minutes=90):
-                    logging.info(f"Waktu penjadwalan berkala MPW (1.5 jam) tercapai: {now.strftime('%H:%M')} WIB.")
-                    
                     if GROUP_ID:
                         try:
+                            open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
+                            if open_tickets:
+                                logging.info(f"Mengirim laporan startup {len(open_tickets)} tiket urgent open ke grup MPW...")
+                                report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW", tickets=open_tickets)
+                                safe_send_message(GROUP_ID, report, parse_mode="MarkdownV2")
+                            else:
+                                logging.info("Tidak ada tiket urgent MPW open saat startup.")
+                        except Exception as e:
+                            logging.error(f"Gagal mengirim rekap startup MPW: {e}")
+                    last_rekap_time_mpw = now
+                    
+                elif last_rekap_time_mpw is None or (now - last_rekap_time_mpw) >= timedelta(minutes=60):
+                    logging.info(f"Waktu penjadwalan berkala MPW (1 jam) tercapai: {now.strftime('%H:%M')} WIB.")
+                    if GROUP_ID:
+                        try:
+                            open_tickets = get_open_tickets_data(sheet_name="TIKET URGENT MPW")
                             if open_tickets:
                                 logging.info(f"Mengirim rekap berkala {len(open_tickets)} tiket urgent open ke grup MPW...")
                                 report = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT MPW", tickets=open_tickets)
@@ -342,31 +282,19 @@ def run_scheduler():
                                 logging.info("Tidak ada tiket urgent MPW open, pengiriman berkala dilewati.")
                         except Exception as e:
                             logging.error(f"Gagal mengirim rekap berkala MPW: {e}")
-                            
                     last_rekap_time_mpw = now
                 
-                # --- JADWAL REKAP BERKALA TIMING STA ---
-                # Jalankan langsung pengiriman seluruh tiket open saat startup
+                # --- JADWAL REKAP BERKALA TIMING STA (Setiap 60 menit, beda 5 menit dengan MPW) ---
                 if first_run_sta:
                     first_run_sta = False
-                    logging.info("Menjalankan pengiriman pertama STA saat startup...")
-                    
-                    if GROUP_ID_STA and open_tickets_sta:
-                        try:
-                            logging.info(f"Mengirim laporan startup {len(open_tickets_sta)} tiket urgent open ke grup STA...")
-                            report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=open_tickets_sta)
-                            safe_send_message(GROUP_ID_STA, report_sta, parse_mode="MarkdownV2")
-                        except Exception as e:
-                            logging.error(f"Gagal mengirim rekap startup STA: {e}")
-                            
-                    last_rekap_time_sta = now
+                    logging.info("Menjadwalkan pengiriman pertama STA 5 menit setelah startup...")
+                    last_rekap_time_sta = now - timedelta(minutes=55) # offset agar run berikutnya tepat 5 menit lagi
                 
-                # Pengiriman rekap terjadwal STA setiap 1.5 jam (90 menit)
-                elif last_rekap_time_sta is None or (now - last_rekap_time_sta) >= timedelta(minutes=90):
-                    logging.info(f"Waktu penjadwalan berkala STA (1.5 jam) tercapai: {now.strftime('%H:%M')} WIB.")
-                    
+                elif last_rekap_time_sta is None or (now - last_rekap_time_sta) >= timedelta(minutes=60):
+                    logging.info(f"Waktu penjadwalan berkala STA (1 jam) tercapai: {now.strftime('%H:%M')} WIB.")
                     if GROUP_ID_STA:
                         try:
+                            open_tickets_sta = get_open_tickets_data(sheet_name="TIKET URGENT STA")
                             if open_tickets_sta:
                                 logging.info(f"Mengirim rekap berkala {len(open_tickets_sta)} tiket urgent open ke grup STA...")
                                 report_sta = fetch_open_tickets_alert(client, MODEL_ID, sheet_name="TIKET URGENT STA", tickets=open_tickets_sta)
@@ -375,7 +303,6 @@ def run_scheduler():
                                 logging.info("Tidak ada tiket urgent STA open, pengiriman berkala dilewati.")
                         except Exception as e:
                             logging.error(f"Gagal mengirim rekap berkala STA: {e}")
-                            
                     last_rekap_time_sta = now
                     
             else:
