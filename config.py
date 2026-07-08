@@ -61,6 +61,28 @@ if group_id_sta_env:
 else:
     GROUP_ID_STA = None
 
+# Parse GROUP_ID_ABSEN secara aman
+group_id_absen_env = strip_quotes(os.getenv("GROUP_ID_ABSEN"))
+if group_id_absen_env:
+    try:
+        GROUP_ID_ABSEN = int(group_id_absen_env)
+    except ValueError:
+        logging.warning("Format GROUP_ID_ABSEN tidak valid (harus berupa angka/integer).")
+        GROUP_ID_ABSEN = None
+else:
+    GROUP_ID_ABSEN = None
+
+# Parse GROUP_ID_ABSEN_PROV secara aman
+group_id_absen_prov_env = strip_quotes(os.getenv("GROUP_ID_ABSEN_PROV"))
+if group_id_absen_prov_env:
+    try:
+        GROUP_ID_ABSEN_PROV = int(group_id_absen_prov_env)
+    except ValueError:
+        logging.warning("Format GROUP_ID_ABSEN_PROV tidak valid (harus berupa angka/integer).")
+        GROUP_ID_ABSEN_PROV = None
+else:
+    GROUP_ID_ABSEN_PROV = None
+
 # ==================== KATEGORI STATUS ====================
 KATEGORI_CLOSED = ['CLOSE', 'CLOSED']
 # Jika ada status selain closed, akan dikategorikan sebagai OPEN secara fallback.
@@ -88,3 +110,8 @@ TECH_TEAMS = [
 TEAM_LIST = [t["canonical"] for t in TECH_TEAMS]
 
 TEKNISI_LIBUR = []
+
+# ==================== MAPPING TEKNISI PROVISIONING MEMPAWAH ====================
+PROV_TEAMS = [
+    {"tags": "@AR_IISSS @TEKNISI_EXPRESSSS001 @TeknisiLokal @Riyan_25030224 @suparj0 @Ginting_01 @Vann113 @Maz_amzi09 @KacongTamvan @INTEL_0001 @Ovanhafizan @Drmawwn @fnano12 @Yekinnino @MasihNego @Suhardy92 @adearkhm16 @AhmadHafizyee @asmoking1 @IM_AAMMM @kyy37 @rickyfahrudillah"}
+]
