@@ -558,60 +558,8 @@ def fetch_rekap_data(sheet_name=None):
         msg += f"🔴 *Total Open* : {total['OPEN']} Tiket\n"
         msg += f"🟢 *Total Closed* : {total['CLOSED']} Tiket\n"
         pct_str = f"{pct_resolved:.1f}".replace('.', '\\.')
-        msg += f"📈 *Resolution Rate* : {pct_str}%\n\n"
+        msg += f"📈 *Resolution Rate* : {pct_str}%\n"
         
-        idx_jam_open = resolve_jam_open(header)
-        idx_booking_date = -1
-        for b_col in ['BOOKING DATE', 'BOOKING_DATE', 'TGL BOOKING', 'TANGGAL BOOKING']:
-            if b_col in header:
-                idx_booking_date = header.index(b_col)
-                break
-                
-        open_tickets = []
-        for row in rows[1:]:
-            if len(row) <= max(idx_status, idx_team, idx_incident):
-                continue
-            incident = str(row[idx_incident]).strip()
-            status_raw = str(row[idx_status]).upper().strip()
-            team_raw = str(row[idx_team]).strip()
-            cust_type = row[idx_cust_type].strip() if idx_cust_type != -1 and len(row) > idx_cust_type else ""
-            booking_date_val = row[idx_booking_date].strip() if idx_booking_date != -1 and len(row) > idx_booking_date else ""
-            
-            duration_str = ""
-            if idx_jam_open != -1 and len(row) > idx_jam_open:
-                jam_val = row[idx_jam_open].strip()
-                dt_open = parse_datetime(jam_val)
-                if dt_open:
-                    duration_str = calculate_duration_str(dt_open)
-            
-            if incident and not any(x in status_raw for x in KATEGORI_CLOSED):
-                ttr_val = calculate_ttr_remaining_str(booking_date_val)
-                open_tickets.append((incident, team_raw, status_raw, cust_type, duration_str, booking_date_val, ttr_val))
-                
-        if open_tickets:
-            # Urutkan berdasarkan prioritas customer type (1. MANJA, 2. REGULER, 3. HVC_GOLD)
-            open_tickets.sort(key=lambda x: (get_priority_rank(x[3]), x[0]))
-            
-            msg += "⚠️ *Daftar Tiket PENDING / OPEN:*\n"
-            wos_formatted = []
-            for inc, t, st, ct, dur, bk, ttr in open_tickets[:15]:
-                ct_str = f" ({ct})" if ct else ""
-                dur_str = f" (durasi: {dur})" if dur else ""
-                if bk:
-                    ttr_str = f" - {ttr}" if ttr else ""
-                    bk_str = f" (booking: {bk}{ttr_str})"
-                else:
-                    bk_str = ""
-                wos_formatted.append(f"■ {inc} [{st}]{ct_str} - {t}{dur_str}{bk_str}")
-                
-            ticket_block = "\n\n\n".join(wos_formatted)
-            ticket_block_escaped = ticket_block.replace('\\', '\\\\').replace('`', '\\`')
-            msg += f"```\n{ticket_block_escaped}\n```\n"
-            if len(open_tickets) > 15:
-                msg += f"_\\+{len(open_tickets) - 15} tiket open lainnya\\.\\.\\._\n"
-        else:
-            msg += "✅ *Semua gangguan telah CLOSED\\!*\n"
-            
         return msg
     except Exception as e:
         return f"❌ *Error Rekap:* {escape_md(str(e))}"
