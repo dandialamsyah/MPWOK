@@ -370,8 +370,8 @@ def run_scheduler():
             current_hour = now.hour
             current_minute = now.minute
             
-            # Rentang waktu operasional (06:00 - 19:00 WIB)
-            if 6 <= current_hour <= 19:
+            # Rentang waktu operasional (09:00 - 19:00 WIB)
+            if 9 <= current_hour <= 19:
                 
                 # --- JADWAL REKAP BERKALA TIMING MPW (Setiap 60 menit) ---
                 if first_run_mpw:
