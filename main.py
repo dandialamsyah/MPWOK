@@ -112,7 +112,7 @@ def safe_send_message(chat_id, text, parse_mode="MarkdownV2", reply_markup=None)
             logging.error(f"Gagal kirim send_message: {e}")
             raise e
 
-def send_attendance_reminder(chat_id_to_notify=None, type_absen="pagi", team_type="assurance"):
+def get_attendance_reminder_text(type_absen="pagi", team_type="assurance"):
     # Kumpulkan semua tag teknisi berdasarkan team_type
     tags_list = []
     if team_type == "provisioning":
@@ -145,7 +145,9 @@ def send_attendance_reminder(chat_id_to_notify=None, type_absen="pagi", team_typ
         f"{body}\n\n"
         f"{tags_str}"
     )
-    
+    return msg
+
+def send_attendance_reminder(chat_id_to_notify=None, type_absen="pagi", team_type="assurance"):
     # Pilih target chat ID default
     if chat_id_to_notify is not None:
         target_chat_id = chat_id_to_notify
@@ -156,9 +158,56 @@ def send_attendance_reminder(chat_id_to_notify=None, type_absen="pagi", team_typ
             target_chat_id = GROUP_ID_ABSEN
             
     if not target_chat_id:
+        if team_type == "provisioning":
+            team_display = "TIM PROVISIONING"
+        else:
+            team_display = "TIM ASSURANCE"
         raise ValueError(f"Target Chat ID tidak ditentukan dan GROUP_ID_ABSEN untuk {team_display} tidak dikonfigurasi.")
         
+    msg = get_attendance_reminder_text(type_absen, team_type)
     return safe_send_message(target_chat_id, msg, parse_mode="MarkdownV2")
+
+def send_combined_attendance_reminder(chat_id_to_notify=None, type_absen="pagi", team_types=["assurance", "provisioning"]):
+    # Tentukan target chat ID
+    if chat_id_to_notify is not None:
+        target_chat_id = chat_id_to_notify
+    else:
+        target_chat_id = GROUP_ID_ABSEN
+        
+    if not target_chat_id:
+        raise ValueError("Target Chat ID tidak ditentukan untuk pengiriman gabungan.")
+        
+    msgs = []
+    for team_type in team_types:
+        msgs.append(get_attendance_reminder_text(type_absen, team_type))
+        
+    combined_msg = "\n\n\n".join(msgs)
+    return safe_send_message(target_chat_id, combined_msg, parse_mode="MarkdownV2")
+
+def send_all_attendance_reminders(chat_id_to_notify=None, type_absen="pagi"):
+    # Tentukan target untuk masing-masing
+    if chat_id_to_notify is not None:
+        target_assurance = chat_id_to_notify
+        target_provisioning = chat_id_to_notify
+    else:
+        target_assurance = GROUP_ID_ABSEN
+        target_provisioning = GROUP_ID_ABSEN_PROV if GROUP_ID_ABSEN_PROV else GROUP_ID_ABSEN
+        
+    if target_assurance == target_provisioning:
+        # Jika targetnya sama, kirim 1 pesan gabungan
+        if target_assurance:
+            return send_combined_attendance_reminder(target_assurance, type_absen, ["assurance", "provisioning"])
+        else:
+            raise ValueError("Target Chat ID tidak ditentukan.")
+    else:
+        # Jika targetnya berbeda, kirim ke masing-masing grup secara terpisah
+        res_assurance = None
+        res_provisioning = None
+        if target_assurance:
+            res_assurance = send_attendance_reminder(target_assurance, type_absen, "assurance")
+        if target_provisioning:
+            res_provisioning = send_attendance_reminder(target_provisioning, type_absen, "provisioning")
+        return res_assurance or res_provisioning
 
 # ==================== COMMAND HANDLERS ====================
 
@@ -251,21 +300,11 @@ def handle_absen(message):
         type_absen = "pagi" if now.hour < 12 else "malam"
         
     try:
-        # 1. Kirim Pengingat Absen untuk TIM Assurance
-        if GROUP_ID_ABSEN:
-            send_attendance_reminder(GROUP_ID_ABSEN, type_absen=type_absen, team_type="assurance")
-        else:
-            send_attendance_reminder(message.chat.id, type_absen=type_absen, team_type="assurance")
-            
-        # 2. Kirim Pengingat Absen untuk TIM Provisioning (ke GROUP_ID_ABSEN_PROV jika diset, fallback ke GROUP_ID_ABSEN)
-        target_group_prov = GROUP_ID_ABSEN_PROV if GROUP_ID_ABSEN_PROV else GROUP_ID_ABSEN
-        if target_group_prov:
-            send_attendance_reminder(target_group_prov, type_absen=type_absen, team_type="provisioning")
-        else:
-            send_attendance_reminder(message.chat.id, type_absen=type_absen, team_type="provisioning")
+        chat_id_target = None if GROUP_ID_ABSEN else message.chat.id
+        send_all_attendance_reminders(chat_id_to_notify=chat_id_target, type_absen=type_absen)
             
         # Beri laporan status sukses ke pengirim perintah
-        safe_reply_to(message, f"✅ *Pesan pengingat absen {type_absen} untuk TIM Assurance & TIM Provisioning berhasil dikirim ke grup masing-masing\\!*")
+        safe_reply_to(message, f"✅ *Pesan pengingat absen {type_absen} untuk TIM Assurance & TIM Provisioning berhasil dikirim\\!*")
     except Exception as e:
         logging.error(f"Gagal mengirim pengingat absen gabungan: {e}")
         safe_reply_to(message, f"❌ *Gagal mengirim pengingat absen:* {str(e)}")
@@ -331,20 +370,10 @@ def handle_callback_queries(call):
         now = datetime.now(tz_wib)
         type_absen = "pagi" if now.hour < 12 else "malam"
         try:
-            # 1. Kirim Pengingat Absen untuk TIM Assurance
-            if GROUP_ID_ABSEN:
-                send_attendance_reminder(GROUP_ID_ABSEN, type_absen=type_absen, team_type="assurance")
-            else:
-                send_attendance_reminder(call.message.chat.id, type_absen=type_absen, team_type="assurance")
+            chat_id_target = None if GROUP_ID_ABSEN else call.message.chat.id
+            send_all_attendance_reminders(chat_id_to_notify=chat_id_target, type_absen=type_absen)
                 
-            # 2. Kirim Pengingat Absen untuk TIM Provisioning (ke GROUP_ID_ABSEN_PROV jika diset, fallback ke GROUP_ID_ABSEN)
-            target_group_prov = GROUP_ID_ABSEN_PROV if GROUP_ID_ABSEN_PROV else GROUP_ID_ABSEN
-            if target_group_prov:
-                send_attendance_reminder(target_group_prov, type_absen=type_absen, team_type="provisioning")
-            else:
-                send_attendance_reminder(call.message.chat.id, type_absen=type_absen, team_type="provisioning")
-                
-            safe_send_message(call.message.chat.id, f"✅ *Pesan pengingat absen {type_absen} untuk TIM Assurance & TIM Provisioning berhasil dikirim ke grup masing-masing\\!*")
+            safe_send_message(call.message.chat.id, f"✅ *Pesan pengingat absen {type_absen} untuk TIM Assurance & TIM Provisioning berhasil dikirim\\!*")
         except Exception as e:
             logging.error(f"Gagal mengirim pengingat absen via button: {e}")
             safe_send_message(call.message.chat.id, f"❌ *Gagal mengirim pengingat absen:* {str(e)}")
@@ -438,45 +467,53 @@ def run_scheduler():
             # --- JADWAL PENGINGAT ABSEN OTOMATIS (Di luar batas jam operasional tiket) ---
             # 1. Absen Pagi (06:00 WIB)
             if current_hour == 6 and 0 <= current_minute < 30:
-                # Tim Assurance
-                if GROUP_ID_ABSEN and last_absen_pagi_date != today_str:
-                    logging.info("Mengirim pengingat absen pagi terjadwal (Assurance)...")
-                    try:
-                        send_attendance_reminder(GROUP_ID_ABSEN, type_absen="pagi", team_type="assurance")
-                        last_absen_pagi_date = today_str
-                    except Exception as e:
-                        logging.error(f"Gagal mengirim pengingat absen pagi terjadwal (Assurance): {e}")
-                
-                # Tim Provisioning
+                need_assurance = bool(GROUP_ID_ABSEN and last_absen_pagi_date != today_str)
                 target_group_prov = GROUP_ID_ABSEN_PROV if GROUP_ID_ABSEN_PROV else GROUP_ID_ABSEN
-                if target_group_prov and last_absen_pagi_prov_date != today_str:
-                    logging.info("Mengirim pengingat absen pagi terjadwal (Provisioning)...")
+                need_provisioning = bool(target_group_prov and last_absen_pagi_prov_date != today_str)
+                
+                if need_assurance or need_provisioning:
                     try:
-                        send_attendance_reminder(target_group_prov, type_absen="pagi", team_type="provisioning")
-                        last_absen_pagi_prov_date = today_str
+                        if need_assurance and need_provisioning and GROUP_ID_ABSEN == target_group_prov:
+                            logging.info("Mengirim pengingat absen pagi terjadwal gabungan...")
+                            send_combined_attendance_reminder(GROUP_ID_ABSEN, type_absen="pagi", team_types=["assurance", "provisioning"])
+                            last_absen_pagi_date = today_str
+                            last_absen_pagi_prov_date = today_str
+                        else:
+                            if need_assurance:
+                                logging.info("Mengirim pengingat absen pagi terjadwal (Assurance)...")
+                                send_attendance_reminder(GROUP_ID_ABSEN, type_absen="pagi", team_type="assurance")
+                                last_absen_pagi_date = today_str
+                            if need_provisioning:
+                                logging.info("Mengirim pengingat absen pagi terjadwal (Provisioning)...")
+                                send_attendance_reminder(target_group_prov, type_absen="pagi", team_type="provisioning")
+                                last_absen_pagi_prov_date = today_str
                     except Exception as e:
-                        logging.error(f"Gagal mengirim pengingat absen pagi terjadwal (Provisioning): {e}")
+                        logging.error(f"Gagal mengirim pengingat absen pagi terjadwal: {e}")
             
             # 2. Absen Malam / Besok (23:00 WIB)
             if current_hour == 23 and 0 <= current_minute < 30:
-                # Tim Assurance
-                if GROUP_ID_ABSEN and last_absen_sore_date != today_str: # Reuse sore variable for malam
-                    logging.info("Mengirim pengingat absen malam terjadwal (Assurance)...")
-                    try:
-                        send_attendance_reminder(GROUP_ID_ABSEN, type_absen="malam", team_type="assurance")
-                        last_absen_sore_date = today_str
-                    except Exception as e:
-                        logging.error(f"Gagal mengirim pengingat absen malam terjadwal (Assurance): {e}")
-                
-                # Tim Provisioning
+                need_assurance = bool(GROUP_ID_ABSEN and last_absen_sore_date != today_str)
                 target_group_prov = GROUP_ID_ABSEN_PROV if GROUP_ID_ABSEN_PROV else GROUP_ID_ABSEN
-                if target_group_prov and last_absen_sore_prov_date != today_str: # Reuse sore variable for malam
-                    logging.info("Mengirim pengingat absen malam terjadwal (Provisioning)...")
+                need_provisioning = bool(target_group_prov and last_absen_sore_prov_date != today_str)
+                
+                if need_assurance or need_provisioning:
                     try:
-                        send_attendance_reminder(target_group_prov, type_absen="malam", team_type="provisioning")
-                        last_absen_sore_prov_date = today_str
+                        if need_assurance and need_provisioning and GROUP_ID_ABSEN == target_group_prov:
+                            logging.info("Mengirim pengingat absen malam terjadwal gabungan...")
+                            send_combined_attendance_reminder(GROUP_ID_ABSEN, type_absen="malam", team_types=["assurance", "provisioning"])
+                            last_absen_sore_date = today_str
+                            last_absen_sore_prov_date = today_str
+                        else:
+                            if need_assurance:
+                                logging.info("Mengirim pengingat absen malam terjadwal (Assurance)...")
+                                send_attendance_reminder(GROUP_ID_ABSEN, type_absen="malam", team_type="assurance")
+                                last_absen_sore_date = today_str
+                            if need_provisioning:
+                                logging.info("Mengirim pengingat absen malam terjadwal (Provisioning)...")
+                                send_attendance_reminder(target_group_prov, type_absen="malam", team_type="provisioning")
+                                last_absen_sore_prov_date = today_str
                     except Exception as e:
-                        logging.error(f"Gagal mengirim pengingat absen malam terjadwal (Provisioning): {e}")
+                        logging.error(f"Gagal mengirim pengingat absen malam terjadwal: {e}")
                     
         except Exception as e:
             logging.error(f"Error pada background scheduler: {e}")
