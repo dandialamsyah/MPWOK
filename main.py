@@ -56,6 +56,21 @@ try:
         telebot.types.BotCommand("absen", "Mengirimkan pengingat absen TIM Assurance & TIM Provisioning"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
+    
+    # Hapus command list (menu perintah) di grup absen agar tidak membingungkan anggota grup
+    if GROUP_ID_ABSEN:
+        try:
+            bot.set_my_commands([], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_ABSEN))
+            logging.info(f"Command menu untuk GROUP_ID_ABSEN ({GROUP_ID_ABSEN}) berhasil dihapus.")
+        except Exception as e:
+            logging.warning(f"Gagal menghapus command menu di GROUP_ID_ABSEN: {e}")
+            
+    if GROUP_ID_ABSEN_PROV:
+        try:
+            bot.set_my_commands([], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_ABSEN_PROV))
+            logging.info(f"Command menu untuk GROUP_ID_ABSEN_PROV ({GROUP_ID_ABSEN_PROV}) berhasil dihapus.")
+        except Exception as e:
+            logging.warning(f"Gagal menghapus command menu di GROUP_ID_ABSEN_PROV: {e}")
 except Exception as e:
     logging.error(f"Gagal mengatur perintah bot: {e}")
 
@@ -272,6 +287,17 @@ def check_user_permission(chat_id, user_id, user_is_bot=False):
         return allowed
 
 # ==================== COMMAND HANDLERS ====================
+
+# Handler untuk mengabaikan dan menghapus pesan command yang dikirimkan di grup absen
+@bot.message_handler(func=lambda message: message.text and message.text.startswith('/') and 
+                    (message.chat.id == GROUP_ID_ABSEN or (GROUP_ID_ABSEN_PROV and message.chat.id == GROUP_ID_ABSEN_PROV)))
+def handle_absen_group_commands(message):
+    logging.info(f"Mengabaikan command '{message.text}' dari chat {message.chat.id} (grup absen)")
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception as e:
+        logging.warning(f"Gagal menghapus pesan command di grup absen: {e}")
+    return
 
 @bot.message_handler(commands=['start', 'help'])
 def handle_start_help(message):

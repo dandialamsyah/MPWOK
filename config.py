@@ -39,49 +39,26 @@ BOT_TOKEN = strip_quotes(os.getenv("BOT_TOKEN"))
 GEMINI_KEY = strip_quotes(os.getenv("GEMINI_KEY"))
 SHEET_NAME = strip_quotes(os.getenv("SHEET_NAME", "Produktivitas_BOT"))
 
+def parse_group_id(env_name):
+    env_val = strip_quotes(os.getenv(env_name))
+    if not env_val:
+        return None
+    try:
+        env_val = env_val.strip()
+        # Jika user memasukkan format group ID biasa (misal -3945408033)
+        # tapi tipenya adalah supergrup, tambahkan awalan -100 secara otomatis
+        if env_val.startswith('-') and not env_val.startswith('-100'):
+            env_val = '-100' + env_val[1:]
+        return int(env_val)
+    except ValueError:
+        logging.warning(f"Format {env_name} tidak valid (harus berupa angka/integer).")
+        return None
+
 # Parse GROUP_ID secara aman
-group_id_env = strip_quotes(os.getenv("GROUP_ID"))
-if group_id_env:
-    try:
-        GROUP_ID = int(group_id_env)
-    except ValueError:
-        logging.warning("Format GROUP_ID tidak valid (harus berupa angka/integer).")
-        GROUP_ID = None
-else:
-    GROUP_ID = None
-
-# Parse GROUP_ID_STA secara aman
-group_id_sta_env = strip_quotes(os.getenv("GROUP_ID_STA"))
-if group_id_sta_env:
-    try:
-        GROUP_ID_STA = int(group_id_sta_env)
-    except ValueError:
-        logging.warning("Format GROUP_ID_STA tidak valid (harus berupa angka/integer).")
-        GROUP_ID_STA = None
-else:
-    GROUP_ID_STA = None
-
-# Parse GROUP_ID_ABSEN secara aman
-group_id_absen_env = strip_quotes(os.getenv("GROUP_ID_ABSEN"))
-if group_id_absen_env:
-    try:
-        GROUP_ID_ABSEN = int(group_id_absen_env)
-    except ValueError:
-        logging.warning("Format GROUP_ID_ABSEN tidak valid (harus berupa angka/integer).")
-        GROUP_ID_ABSEN = None
-else:
-    GROUP_ID_ABSEN = None
-
-# Parse GROUP_ID_ABSEN_PROV secara aman
-group_id_absen_prov_env = strip_quotes(os.getenv("GROUP_ID_ABSEN_PROV"))
-if group_id_absen_prov_env:
-    try:
-        GROUP_ID_ABSEN_PROV = int(group_id_absen_prov_env)
-    except ValueError:
-        logging.warning("Format GROUP_ID_ABSEN_PROV tidak valid (harus berupa angka/integer).")
-        GROUP_ID_ABSEN_PROV = None
-else:
-    GROUP_ID_ABSEN_PROV = None
+GROUP_ID = parse_group_id("GROUP_ID")
+GROUP_ID_STA = parse_group_id("GROUP_ID_STA")
+GROUP_ID_ABSEN = parse_group_id("GROUP_ID_ABSEN")
+GROUP_ID_ABSEN_PROV = parse_group_id("GROUP_ID_ABSEN_PROV")
 
 # ==================== KATEGORI STATUS ====================
 KATEGORI_CLOSED = ['CLOSE', 'CLOSED']
