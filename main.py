@@ -209,6 +209,55 @@ def send_all_attendance_reminders(chat_id_to_notify=None, type_absen="pagi"):
             res_provisioning = send_attendance_reminder(target_provisioning, type_absen, "provisioning")
         return res_assurance or res_provisioning
 
+def check_user_permission(chat_id, user_id, user_is_bot=False):
+    """
+    Memeriksa apakah user memiliki hak akses (admin/creator/bot)
+    untuk menjalankan perintah absen.
+    """
+    if user_is_bot:
+        return True
+    if not user_id:
+        return False
+
+    # Jika di dalam grup/supergrup, cek status admin di grup tersebut
+    if str(chat_id).startswith('-'):
+        try:
+            member = bot.get_chat_member(chat_id, user_id)
+            if member.status in ['creator', 'administrator']:
+                return True
+        except Exception as e:
+            logging.error(f"Gagal mengecek status admin di grup {chat_id}: {e}")
+            return False
+        return False
+    else:
+        # Jika di private chat, cek status admin di GROUP_ID_ABSEN atau GROUP_ID_ABSEN_PROV (jika dikonfigurasi)
+        allowed = False
+        checked_any = False
+        
+        if GROUP_ID_ABSEN:
+            checked_any = True
+            try:
+                member = bot.get_chat_member(GROUP_ID_ABSEN, user_id)
+                if member.status in ['creator', 'administrator']:
+                    allowed = True
+            except Exception as e:
+                logging.error(f"Gagal mengecek status admin di GROUP_ID_ABSEN ({GROUP_ID_ABSEN}): {e}")
+                
+        if not allowed and GROUP_ID_ABSEN_PROV:
+            checked_any = True
+            try:
+                member = bot.get_chat_member(GROUP_ID_ABSEN_PROV, user_id)
+                if member.status in ['creator', 'administrator']:
+                    allowed = True
+            except Exception as e:
+                logging.error(f"Gagal mengecek status admin di GROUP_ID_ABSEN_PROV ({GROUP_ID_ABSEN_PROV}): {e}")
+                
+        if not checked_any:
+            # Jika tidak ada grup absen yang dikonfigurasi, izinkan akses di private chat
+            return True
+            
+        return allowed
+
 # ==================== COMMAND HANDLERS ====================
 
 @bot.message_handler(commands=['start', 'help'])
@@ -283,6 +332,13 @@ def handle_urgentsta(message):
 
 @bot.message_handler(commands=['absen'])
 def handle_absen(message):
+    user_id = message.from_user.id if message.from_user else None
+    user_is_bot = message.from_user.is_bot if message.from_user else False
+    
+    if not check_user_permission(message.chat.id, user_id, user_is_bot):
+        safe_reply_to(message, "❌ *Perintah ini hanya dapat dijalankan oleh Admin atau Bot\\!*")
+        return
+
     bot.send_chat_action(message.chat.id, 'typing')
     
     # Parse parameter pagi/malam jika ada
@@ -364,6 +420,14 @@ def handle_callback_queries(call):
         safe_send_message(call.message.chat.id, msg, parse_mode="MarkdownV2")
 
     elif call.data == "btn_absen":
+        user_id = call.from_user.id if call.from_user else None
+        user_is_bot = call.from_user.is_bot if call.from_user else False
+        
+        if not check_user_permission(call.message.chat.id, user_id, user_is_bot):
+            first_name = call.from_user.first_name if call.from_user else "Pengguna"
+            safe_send_message(call.message.chat.id, f"❌ *{first_name}*, Anda tidak memiliki akses untuk menggunakan tombol ini\\! Hanya Admin yang diizinkan\\.")
+            return
+
         bot.send_chat_action(call.message.chat.id, 'typing')
         # Default berdasarkan jam saat ini (WIB)
         tz_wib = timezone(timedelta(hours=7))
