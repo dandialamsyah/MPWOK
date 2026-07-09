@@ -336,7 +336,7 @@ def handle_absen(message):
     user_is_bot = message.from_user.is_bot if message.from_user else False
     
     if not check_user_permission(message.chat.id, user_id, user_is_bot):
-        safe_reply_to(message, "❌ *Perintah ini hanya dapat dijalankan oleh Admin atau Bot\\!*")
+        safe_reply_to(message, "*KAMU SIAPA SURUH SAYA???*")
         return
 
     bot.send_chat_action(message.chat.id, 'typing')
