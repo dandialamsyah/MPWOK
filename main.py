@@ -1,4 +1,5 @@
 import logging
+import random
 # pyrefly: ignore [missing-import]
 import telebot
 # pyrefly: ignore [missing-import]
@@ -9,6 +10,18 @@ from datetime import datetime, timezone, timedelta
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, TECH_TEAMS, PROV_TEAMS
 from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data
+
+# Daftar pesan penolakan kocak untuk non-admin
+FUNNY_REJECTIONS = [
+    "*KAMU SIAPA SURUH SAYA???*",
+    "*Eits, tidak semudah itu Ferguso\\! Hanya admin yang bisa\\.*",
+    "*Ndak bisa, ndak bisa\\. Kamu bukan admin\\!*",
+    "*Siapa lu? Kenal juga nggak, main perintah aja\\!*",
+    "*Waduh, minimal admin dulu baru boleh perintah\\-perintah\\.*",
+    "*Hayo, mau ngapain? Kamu bukan admin ya\\!*",
+    "*Akses ditolak\\! Coba rayu admin dulu sana\\.*",
+    "*Ngimpi apa semalam kok berani perintah saya? Kamu kan bukan admin\\!*"
+]
 
 # Inisialisasi Client Gemini API
 client = None
@@ -336,7 +349,7 @@ def handle_absen(message):
     user_is_bot = message.from_user.is_bot if message.from_user else False
     
     if not check_user_permission(message.chat.id, user_id, user_is_bot):
-        safe_reply_to(message, "*KAMU SIAPA SURUH SAYA???*")
+        safe_reply_to(message, random.choice(FUNNY_REJECTIONS))
         return
 
     bot.send_chat_action(message.chat.id, 'typing')
