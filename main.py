@@ -603,13 +603,13 @@ def run_scheduler():
 if __name__ == "__main__":
     logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
     
-    # Jalankan background scheduler jika GROUP_ID atau GROUP_ID_STA tersedia
-    if GROUP_ID or GROUP_ID_STA:
+    # Jalankan background scheduler jika ada GROUP_ID yang tersedia
+    if GROUP_ID or GROUP_ID_STA or GROUP_ID_ABSEN or GROUP_ID_ABSEN_PROV:
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        logging.info("Scheduler thread for urgent tickets launched successfully.")
+        logging.info("Scheduler thread launched successfully.")
     else:
-        logging.warning("GROUP_ID dan GROUP_ID_STA tidak terdeteksi di .env. Fitur kirim terjadwal urgent dinonaktifkan.")
+        logging.warning("Tidak ada GROUP_ID yang dikonfigurasi di .env. Fitur kirim terjadwal dinonaktifkan.")
         
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
