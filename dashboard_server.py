@@ -1606,3 +1606,7 @@ def start_dashboard_server():
         httpd.serve_forever()
     except Exception as e:
         logger.critical(f"Failed to start dashboard web server on port {port}: {e}")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    start_dashboard_server()
