@@ -671,3 +671,11 @@ def fetch_psb_data():
     except Exception as e:
         return f"❌ *Error Rekap PSB:* {escape_md(str(e))}"
 
+def clear_cache():
+    """Clear Google Sheets cached rows and times."""
+    global _cached_rows_dict, _cache_time_dict
+    _cached_rows_dict.clear()
+    _cache_time_dict.clear()
+    logging.info("Google Sheets cache cleared successfully.")
+
+
