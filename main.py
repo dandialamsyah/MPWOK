@@ -637,14 +637,5 @@ if __name__ == "__main__":
     else:
         logging.warning("Tidak ada GROUP_ID yang dikonfigurasi di .env. Fitur kirim terjadwal dinonaktifkan.")
         
-    # Jalankan dashboard web server di thread terpisah agar berjalan bersamaan dengan bot
-    try:
-        from dashboard_server import start_dashboard_server
-        dashboard_thread = threading.Thread(target=start_dashboard_server, daemon=True)
-        dashboard_thread.start()
-        logging.info("Dashboard Web Server thread launched successfully.")
-    except Exception as e:
-        logging.error(f"Gagal meluncurkan thread Dashboard Web Server: {e}")
-        
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
