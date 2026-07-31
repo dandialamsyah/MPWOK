@@ -136,12 +136,28 @@ def get_worksheet(sheet_name=None):
         logging.info(f"Mencoba menghubungkan kembali ke Google Sheets ({cache_key})...")
         google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
         if google_creds_json:
-            # Otomatis perbaiki jika ada backslash yang terpotong saat copy-paste di Railway (misal \n menjadi \ saja)
-            # Regex ini mencari backslash yang langsung diikuti oleh karakter Base64 (A-Z, a-z, 0-9, +, /, =)
-            # dan mengembalikannya menjadi \n + karakter tersebut.
             import re
-            google_creds_json = re.sub(r'\\([A-Za-z0-9+/=])', r'\\n\1', google_creds_json)
-            info = json.loads(google_creds_json)
+            try:
+                # Coba parse menggunakan json.loads standar
+                info = json.loads(google_creds_json)
+            except Exception as e:
+                logging.warning(f"Gagal parse GOOGLE_CREDENTIALS dengan json.loads ({e}). Menggunakan regex parser...")
+                # Ekstraksi manual jika ada karakter escape yang tidak valid (misal salah ketik/terpotong di Railway)
+                info = {}
+                keys = [
+                    "type", "project_id", "private_key_id", "private_key", 
+                    "client_email", "client_id", "auth_uri", "token_uri", 
+                    "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"
+                ]
+                for k in keys:
+                    match = re.search(f'"{k}"\\s*:\\s*"([^"]*)"', google_creds_json)
+                    if match:
+                        val = match.group(1)
+                        if k == "private_key":
+                            # Konversi literal \n ke karakter newline asli
+                            val = val.replace('\\n', '\n')
+                        info[k] = val
+                
             creds = Credentials.from_service_account_info(info, scopes=SCOPE)
         else:
             creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
