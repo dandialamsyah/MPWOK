@@ -136,6 +136,11 @@ def get_worksheet(sheet_name=None):
         logging.info(f"Mencoba menghubungkan kembali ke Google Sheets ({cache_key})...")
         google_creds_json = os.getenv("GOOGLE_CREDENTIALS")
         if google_creds_json:
+            # Otomatis perbaiki jika ada backslash yang terpotong saat copy-paste di Railway (misal \n menjadi \ saja)
+            # Regex ini mencari backslash yang langsung diikuti oleh karakter Base64 (A-Z, a-z, 0-9, +, /, =)
+            # dan mengembalikannya menjadi \n + karakter tersebut.
+            import re
+            google_creds_json = re.sub(r'\\([A-Za-z0-9+/=])', r'\\n\1', google_creds_json)
             info = json.loads(google_creds_json)
             creds = Credentials.from_service_account_info(info, scopes=SCOPE)
         else:
