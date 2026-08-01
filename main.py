@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime, timezone, timedelta
 
-from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, TECH_TEAMS, PROV_TEAMS
+from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, TECH_TEAMS, PROV_TEAMS, START_DASHBOARD
 from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data
 
 # Daftar pesan penolakan kocak untuk non-admin
@@ -638,13 +638,16 @@ if __name__ == "__main__":
         logging.warning("Tidak ada GROUP_ID yang dikonfigurasi di .env. Fitur kirim terjadwal dinonaktifkan.")
         
     # Jalankan dashboard web server di thread terpisah agar berjalan bersamaan dengan bot
-    try:
-        from dashboard_server import start_dashboard_server
-        dashboard_thread = threading.Thread(target=start_dashboard_server, daemon=True)
-        dashboard_thread.start()
-        logging.info("Dashboard Web Server thread launched successfully.")
-    except Exception as e:
-        logging.error(f"Gagal meluncurkan thread Dashboard Web Server: {e}")
+    if START_DASHBOARD:
+        try:
+            from dashboard_server import start_dashboard_server
+            dashboard_thread = threading.Thread(target=start_dashboard_server, daemon=True)
+            dashboard_thread.start()
+            logging.info("Dashboard Web Server thread launched successfully.")
+        except Exception as e:
+            logging.error(f"Gagal meluncurkan thread Dashboard Web Server: {e}")
+    else:
+        logging.info("Dashboard Web Server dinonaktifkan via konfigurasi (START_DASHBOARD=False).")
         
     # Mulai bot polling
     bot.infinity_polling(timeout=60, long_polling_timeout=60)

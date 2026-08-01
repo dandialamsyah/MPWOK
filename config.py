@@ -38,6 +38,7 @@ def strip_quotes(val):
 BOT_TOKEN = strip_quotes(os.getenv("BOT_TOKEN"))
 GEMINI_KEY = strip_quotes(os.getenv("GEMINI_KEY"))
 SHEET_NAME = strip_quotes(os.getenv("SHEET_NAME", "Produktivitas_BOT"))
+START_DASHBOARD = os.getenv("START_DASHBOARD", "True").strip().lower() in ("true", "1", "yes")
 
 def parse_group_id(env_name):
     env_val = strip_quotes(os.getenv(env_name))
