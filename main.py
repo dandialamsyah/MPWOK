@@ -537,11 +537,11 @@ def run_scheduler():
                             logging.error(f"Gagal mengirim rekap berkala MPW: {e}")
                     last_rekap_time_mpw = now
                 
-                # --- JADWAL REKAP BERKALA TIMING STA (Setiap 60 menit, beda 5 menit dengan MPW) ---
+                # --- JADWAL REKAP BERKALA TIMING STA (Setiap 60 menit, beda 2 menit dengan MPW) ---
                 if first_run_sta:
                     first_run_sta = False
-                    logging.info("Menjadwalkan pengiriman pertama STA 5 menit setelah startup...")
-                    last_rekap_time_sta = now - timedelta(minutes=55) # offset agar run berikutnya tepat 5 menit lagi
+                    logging.info("Menjadwalkan pengiriman pertama STA 2 menit setelah startup...")
+                    last_rekap_time_sta = now - timedelta(minutes=58) # offset agar run berikutnya tepat 2 menit lagi
                 
                 elif last_rekap_time_sta is None or (now - last_rekap_time_sta) >= timedelta(minutes=60):
                     logging.info(f"Waktu penjadwalan berkala STA (1 jam) tercapai: {now.strftime('%H:%M')} WIB.")
