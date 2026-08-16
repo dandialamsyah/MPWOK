@@ -770,11 +770,13 @@ def parse_report_text(text):
     return parsed
 
 
-def save_report_to_sheet(report_id, report_text, sender_id, username, sender_name, msg_timestamp):
+def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_timestamp):
     """
     Saves a report to the 'LAPORAN MPW' worksheet.
     Parses the report text to extract fields if possible.
+    Generates a sequential report ID (format: ID.000001) based on row index.
     If the sheet is empty, initializes it with styled headers.
+    Returns the generated report_id.
     """
     try:
         ws = get_worksheet("LAPORAN MPW")
@@ -784,8 +786,8 @@ def save_report_to_sheet(report_id, report_text, sender_id, username, sender_nam
         # Ambil semua data untuk menghitung baris
         rows = ws.get_all_values()
         
-        # Bersihkan whitespace
-        non_empty_rows = [r for r in rows if any(cell.strip() for cell in r)]
+        # Bersihkan whitespace, hitung baris yang memiliki data ID Laporan (indeks 1)
+        non_empty_rows = [r for r in rows if len(r) > 1 and r[1].strip() != ""]
         
         headers = [
             "No", "ID Laporan", "Tanggal Laporan", "Jam Laporan", "ID Pengirim", 
@@ -825,6 +827,9 @@ def save_report_to_sheet(report_id, report_text, sender_id, username, sender_nam
             else:
                 next_no = len(non_empty_rows)
             
+        # Generasi ID Laporan Berurutan (format: ID.000001)
+        report_id = f"ID.{next_no:06d}"
+        
         # Konversi timestamp ke WIB (UTC+7)
         tz_wib = timezone(timedelta(hours=7))
         dt_local = datetime.fromtimestamp(msg_timestamp, tz=timezone.utc).astimezone(tz_wib)
@@ -854,7 +859,7 @@ def save_report_to_sheet(report_id, report_text, sender_id, username, sender_nam
         
         ws.append_row(new_row, value_input_option='USER_ENTERED')
         logging.info(f"Berhasil menyimpan laporan {report_id} ke Google Sheet.")
-        return True
+        return report_id
     except Exception as e:
         logging.error(f"Gagal menyimpan laporan ke Google Sheet: {e}")
         raise e

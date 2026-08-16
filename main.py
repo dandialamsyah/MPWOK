@@ -524,14 +524,9 @@ def handle_request(message):
         
     bot.send_chat_action(message.chat.id, 'typing')
     
-    # Generate ID eskalasi acak 9 digit
-    id_num = random.randint(100000000, 999999999)
-    report_id = f"ID.{id_num}"
-    
     try:
-        # Simpan ke Google Sheet
-        save_report_to_sheet(
-            report_id=report_id,
+        # Simpan ke Google Sheet dan dapatkan report_id berurutan
+        report_id = save_report_to_sheet(
             report_text=report_text,
             sender_id=user_id,
             username=username,

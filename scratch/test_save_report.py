@@ -25,23 +25,21 @@ def test():
         print(f"  {k}: {repr(v)}")
         
     print("\nSaving to Google Sheets...")
-    report_id = "ID.999999999"
     sender_id = 999999999
     username = "test_user_new"
     sender_name = "New Test User"
     msg_timestamp = int(time.time())
     
     try:
-        success = save_report_to_sheet(
-            report_id=report_id,
+        returned_id = save_report_to_sheet(
             report_text=test_text,
             sender_id=sender_id,
             username=username,
             sender_name=sender_name,
             msg_timestamp=msg_timestamp
         )
-        if success:
-            print("Successfully saved report to Google Sheet!")
+        if returned_id:
+            print(f"Successfully saved report to Google Sheet! Generated ID: {returned_id}")
         else:
             print("Failed to save report to Google Sheet.")
     except Exception as e:
