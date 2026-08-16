@@ -471,6 +471,7 @@ def handle_request(message):
     
     report_text = ""
     msg_timestamp = message.date
+    report_message_id = message.message_id
     
     # 1. Cek apakah ini reply ke pesan lain
     if message.reply_to_message:
@@ -479,6 +480,7 @@ def handle_request(message):
             original_text = "[Pesan Media]"
             
         msg_timestamp = message.reply_to_message.date
+        report_message_id = message.reply_to_message.message_id
         
         # Ambil tambahan teks jika ada di command request
         command_text = ""
@@ -531,12 +533,18 @@ def handle_request(message):
             sender_id=user_id,
             username=username,
             sender_name=sender_name,
-            msg_timestamp=msg_timestamp
+            msg_timestamp=msg_timestamp,
+            chat_id=message.chat.id,
+            message_id=report_message_id
         )
         
         # Kirim balasan sukses sesuai permintaan user
         response_msg = f"Request eskalasi berhasil dibuat dengan nomor {report_id}, laporan diterima, menunggu petugas"
         safe_reply_to(message, response_msg, parse_mode=None)
+    except ValueError as ve:
+        # Tampilkan penolakan karena nomor internet duplikasi yang masih open
+        logging.warning(f"Laporan ditolak: {ve}")
+        safe_reply_to(message, f"❌ *Laporan ditolak:* {str(ve)}", parse_mode=None)
     except Exception as e:
         logging.error(f"Gagal memproses request: {e}")
         safe_reply_to(message, f"❌ *Gagal menyimpan laporan:* {escape_markdown(str(e))}", parse_mode="MarkdownV2")
@@ -763,6 +771,38 @@ def run_scheduler():
         except Exception as e:
             logging.error(f"Error pada background scheduler: {e}")
             
+        # --- NOTIFIKASI CLOSED REPORTS DARI GOOGLE SHEET ---
+        try:
+            from sheets_handler import get_closed_unnotified_reports, mark_report_notified
+            closed_list = get_closed_unnotified_reports()
+            for report in closed_list:
+                r_idx = report['row_index']
+                r_id = report['report_id']
+                inet = report['inet']
+                chat_id = report['chat_id']
+                msg_id = report['message_id']
+                col_idx = report['col_notified']
+                
+                # Buat pesan penutupan laporan
+                close_msg = (
+                    f"✅ *Laporan diselesaikan / CLOSE*\n\n"
+                    f"• Nomor Laporan: `{r_id}`\n"
+                    f"• Nomor Internet: `{inet}`\n\n"
+                    f"Terima kasih atas kerja samanya, laporan telah ditutup oleh petugas\\."
+                )
+                
+                try:
+                    # Kirim pesan dengan mereply pesan asli laporan
+                    bot.send_message(chat_id, close_msg, reply_to_message_id=msg_id, parse_mode="MarkdownV2")
+                    logging.info(f"Berhasil mengirim notifikasi close untuk {r_id} di chat {chat_id}.")
+                    
+                    # Tandai baris di Google Sheets bahwa notifikasi close sudah dikirim
+                    mark_report_notified(r_idx, col_idx)
+                except Exception as me:
+                    logging.error(f"Gagal mengirim notifikasi close atau mengupdate sheet untuk {r_id}: {me}")
+        except Exception as e:
+            logging.error(f"Error pada pengecekan notifikasi close: {e}")
+            
         time.sleep(30) # Cek setiap 30 detik
 
 
@@ -772,7 +812,7 @@ if __name__ == "__main__":
     logging.info("🚀 Bot Monitoring Gangguan Mempawah Activated & Running...")
     
     # Jalankan background scheduler jika ada GROUP_ID yang tersedia
-    if GROUP_ID or GROUP_ID_STA or GROUP_ID_ABSEN or GROUP_ID_ABSEN_PROV:
+    if GROUP_ID or GROUP_ID_STA or GROUP_ID_ABSEN or GROUP_ID_ABSEN_PROV or GROUP_ID_REQUEST:
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
         logging.info("Scheduler thread launched successfully.")

@@ -36,7 +36,9 @@ def test():
             sender_id=sender_id,
             username=username,
             sender_name=sender_name,
-            msg_timestamp=msg_timestamp
+            msg_timestamp=msg_timestamp,
+            chat_id=999999999,
+            message_id=12345
         )
         if returned_id:
             print(f"Successfully saved report to Google Sheet! Generated ID: {returned_id}")

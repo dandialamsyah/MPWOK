@@ -770,7 +770,7 @@ def parse_report_text(text):
     return parsed
 
 
-def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_timestamp):
+def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_timestamp, chat_id, message_id):
     """
     Saves a report to the 'LAPORAN MPW' worksheet.
     Parses the report text to extract fields if possible.
@@ -792,7 +792,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
         headers = [
             "No", "ID Laporan", "Tanggal Laporan", "Jam Laporan", "ID Pengirim", 
             "Username", "Nama Pengirim", "Inet", "Nama Pelanggan", "CP Aktif WA", 
-            "Alamat", "Kendala", "Laporan Lengkap"
+            "Alamat", "Kendala", "Laporan Lengkap", "status", "Chat ID", "Message ID", "Notifikasi Close"
         ]
         
         # Jika sheet kosong (belum ada headers atau isinya kosong sama sekali)
@@ -800,7 +800,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
             ws.clear()
             ws.insert_row(headers, 1)
             try:
-                ws.format("A1:M1", {
+                ws.format("A1:Q1", {
                     "textFormat": {"bold": True},
                     "horizontalAlignment": "CENTER",
                     "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
@@ -815,7 +815,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
                 ws.clear()
                 ws.insert_row(headers, 1)
                 try:
-                    ws.format("A1:M1", {
+                    ws.format("A1:Q1", {
                         "textFormat": {"bold": True},
                         "horizontalAlignment": "CENTER",
                         "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
@@ -827,6 +827,34 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
             else:
                 next_no = len(non_empty_rows)
             
+        # Parse fields from report_text
+        parsed_fields = parse_report_text(report_text)
+        new_inet = parsed_fields['inet'].strip()
+        
+        # --- PENGECEKAN DUPLIKASI NOMOR INTERNET ---
+        # Hanya periksa jika new_inet tidak kosong dan bukan tanda strip '-'
+        if new_inet and new_inet != "-":
+            try:
+                header_upper = [h.strip().upper() for h in rows[0]] if rows else [h.strip().upper() for h in headers]
+                if "INET" in header_upper and "STATUS" in header_upper and "ID LAPORAN" in header_upper:
+                    idx_inet = header_upper.index("INET")
+                    idx_status = header_upper.index("STATUS")
+                    idx_id = header_upper.index("ID LAPORAN")
+                    
+                    # Periksa semua baris data yang ada
+                    for row in rows[1:]:
+                        if len(row) > max(idx_inet, idx_status, idx_id):
+                            old_inet = row[idx_inet].strip()
+                            old_status = row[idx_status].strip().upper()
+                            old_id = row[idx_id].strip()
+                            
+                            # Jika inet sama dan status bukan CLOSED/CLOSE
+                            if old_inet == new_inet and old_status not in ['CLOSE', 'CLOSED']:
+                                raise ValueError(f"Nomor internet {new_inet} saat ini masih dalam status OPEN dengan nomor Laporan {old_id}.")
+            except ValueError as ve:
+                if "masih dalam status OPEN" in str(ve):
+                    raise ve
+        
         # Generasi ID Laporan Berurutan (format: ID.000001)
         report_id = f"ID.{next_no:06d}"
         
@@ -837,9 +865,6 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
         date_str = dt_local.strftime("%Y-%m-%d")
         time_str = dt_local.strftime("%H:%M:%S")
         
-        # Parse fields from report_text
-        parsed_fields = parse_report_text(report_text)
-        
         # Persiapkan data baru
         new_row = [
             next_no,
@@ -849,12 +874,16 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
             str(sender_id),
             f"@{username}" if username else "-",
             sender_name or "-",
-            parsed_fields['inet'] or "-",
+            new_inet or "-",
             parsed_fields['nama'] or "-",
             parsed_fields['cp'] or "-",
             parsed_fields['alamat'] or "-",
             parsed_fields['kendala'] or "-",
-            report_text
+            report_text,
+            "OPEN", # status awal
+            str(chat_id),
+            str(message_id),
+            "-" # notifikasi close belum terkirim
         ]
         
         ws.append_row(new_row, value_input_option='USER_ENTERED')
@@ -863,6 +892,78 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
     except Exception as e:
         logging.error(f"Gagal menyimpan laporan ke Google Sheet: {e}")
         raise e
+
+
+def get_closed_unnotified_reports():
+    """
+    Scans the 'LAPORAN MPW' sheet for rows where the status is closed (CLOSE/CLOSED)
+    but the close notification has not been sent yet.
+    Returns a list of dicts with row details.
+    """
+    try:
+        ws = get_worksheet("LAPORAN MPW")
+        if ws is None:
+            return []
+            
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            return []
+            
+        header = [h.strip().upper() for h in rows[0]]
+        
+        # Temukan indeks kolom-kolom yang diperlukan
+        try:
+            idx_id = header.index("ID LAPORAN")
+            idx_inet = header.index("INET")
+            idx_status = header.index("STATUS")
+            idx_chat_id = header.index("CHAT ID")
+            idx_msg_id = header.index("MESSAGE ID")
+            idx_notified = header.index("NOTIFIKASI CLOSE")
+        except ValueError as e:
+            logging.warning(f"Kolom yang diperlukan untuk notifikasi close tidak lengkap: {e}")
+            return []
+            
+        closed_reports = []
+        for i, row in enumerate(rows[1:], start=2): # 1-based index untuk row di sheet
+            if len(row) <= max(idx_id, idx_inet, idx_status, idx_chat_id, idx_msg_id, idx_notified):
+                continue
+                
+            report_id = row[idx_id].strip()
+            inet = row[idx_inet].strip()
+            status_val = row[idx_status].strip().upper()
+            chat_id_val = row[idx_chat_id].strip()
+            msg_id_val = row[idx_msg_id].strip()
+            notified_val = row[idx_notified].strip().upper()
+            
+            # Jika status CLOSE/CLOSED dan belum dinotifikasi
+            if status_val in ['CLOSE', 'CLOSED'] and notified_val not in ['YA', 'YES', 'TRUE', 'DONE']:
+                if chat_id_val and msg_id_val:
+                    closed_reports.append({
+                        'row_index': i,
+                        'report_id': report_id,
+                        'inet': inet,
+                        'chat_id': int(chat_id_val),
+                        'message_id': int(msg_id_val),
+                        'col_notified': idx_notified + 1 # 1-based index untuk gspread update_cell
+                    })
+        return closed_reports
+    except Exception as e:
+        logging.error(f"Error checking closed reports: {e}")
+        return []
+
+
+def mark_report_notified(row_index, col_index):
+    """
+    Marks a report as notified by updating the specific cell to 'YA'.
+    """
+    try:
+        ws = get_worksheet("LAPORAN MPW")
+        if ws:
+            ws.update_cell(row_index, col_index, "YA")
+            return True
+    except Exception as e:
+        logging.error(f"Gagal mengupdate status notifikasi di baris {row_index}: {e}")
+    return False
 
 
 
