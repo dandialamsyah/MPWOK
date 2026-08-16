@@ -40,9 +40,12 @@ if not BOT_TOKEN:
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Mengatur daftar menu perintah di pojok kiri bawah Telegram
+# Mengatur daftar menu perintah di pojok kiri bawah Telegram secara ter-scope
 try:
-    bot.set_my_commands([
+    # 1. Kosongkan perintah default agar tidak ada command list yang bocor ke grup request atau grup absen
+    bot.set_my_commands([], scope=telebot.types.BotCommandScopeDefault())
+    
+    full_commands = [
         telebot.types.BotCommand("start", "Mulai bot & Tampilkan menu utama"),
         telebot.types.BotCommand("rekap", "Melihat rekap gangguan berkala"),
         telebot.types.BotCommand("cek_open", "Memeriksa gangguan yang masih OPEN"),
@@ -57,9 +60,34 @@ try:
         telebot.types.BotCommand("absen", "Mengirimkan pengingat absen TIM Assurance & TIM Provisioning"),
         telebot.types.BotCommand("request", "Kirim laporan/request ke Google Sheets"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
-    ])
+    ]
     
-    # Hapus command list (menu perintah) di grup absen agar tidak membingungkan anggota grup
+    # 2. Atur perintah lengkap untuk chat pribadi (Private Chats)
+    try:
+        bot.set_my_commands(full_commands, scope=telebot.types.BotCommandScopeAllPrivateChats())
+        logging.info("Command menu untuk chat pribadi berhasil diatur.")
+    except Exception as e:
+        logging.warning(f"Gagal mengatur command menu untuk chat pribadi: {e}")
+        
+    # 3. Atur perintah lengkap untuk grup monitoring MPW (GROUP_ID)
+    if GROUP_ID:
+        try:
+            bot.set_my_commands(full_commands, scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID))
+            bot.set_my_commands(full_commands, scope=telebot.types.BotCommandScopeChatAdministrators(chat_id=GROUP_ID))
+            logging.info(f"Command menu untuk GROUP_ID ({GROUP_ID}) berhasil diatur (member & admin).")
+        except Exception as e:
+            logging.warning(f"Gagal mengatur command menu untuk GROUP_ID: {e}")
+            
+    # 4. Atur perintah lengkap untuk grup monitoring STA (GROUP_ID_STA)
+    if GROUP_ID_STA:
+        try:
+            bot.set_my_commands(full_commands, scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_STA))
+            bot.set_my_commands(full_commands, scope=telebot.types.BotCommandScopeChatAdministrators(chat_id=GROUP_ID_STA))
+            logging.info(f"Command menu untuk GROUP_ID_STA ({GROUP_ID_STA}) berhasil diatur (member & admin).")
+        except Exception as e:
+            logging.warning(f"Gagal mengatur command menu untuk GROUP_ID_STA: {e}")
+    
+    # 5. Pastikan grup absen dan grup request bersih dari menu perintah
     if GROUP_ID_ABSEN:
         try:
             bot.set_my_commands([], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_ABSEN))
@@ -78,9 +106,7 @@ try:
             
     if GROUP_ID_REQUEST:
         try:
-            # Hapus commands menu untuk regular members di request group
             bot.set_my_commands([], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_REQUEST))
-            # Hapus commands menu untuk administrators di request group
             bot.set_my_commands([], scope=telebot.types.BotCommandScopeChatAdministrators(chat_id=GROUP_ID_REQUEST))
             logging.info(f"Command menu untuk GROUP_ID_REQUEST ({GROUP_ID_REQUEST}) berhasil diatur ke KOSONG (member & admin).")
         except Exception as e:
