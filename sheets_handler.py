@@ -700,3 +700,165 @@ def clear_cache():
     logging.info("Google Sheets cache cleared successfully.")
 
 
+def parse_report_text(text):
+    """
+    Parses a report/request text line-by-line to extract fields like:
+    - INET / No. Internet
+    - NAMA / User
+    - CP AKTIF WA / telegram teknisi / CP / WA
+    - ALAMAT / Witel
+    - KENDALA / Keterangan
+    """
+    # Clean text from /request command and format header
+    cleaned = text
+    cleaned = re.sub(r'(?i)/request', '', cleaned)
+    cleaned = re.sub(r'(?i)FORMAT\s+LAPORAN\s+GANGGUAN\s+MEMPAWAH', '', cleaned)
+    
+    parsed = {
+        'inet': '',
+        'nama': '',
+        'cp': '',
+        'alamat': '',
+        'kendala': ''
+    }
+    
+    lines = cleaned.split('\n')
+    current_key = None
+    accumulated_values = {
+        'inet': [],
+        'nama': [],
+        'cp': [],
+        'alamat': [],
+        'kendala': []
+    }
+    
+    for line in lines:
+        line_str = line.strip()
+        if not line_str:
+            continue
+        
+        found_new_field = False
+        if ':' in line_str:
+            parts = line_str.split(':', 1)
+            potential_label = parts[0].strip().upper()
+            potential_val = parts[1].strip()
+            
+            mapped_field = None
+            if 'INET' in potential_label:
+                mapped_field = 'inet'
+            elif 'NAMA' in potential_label or 'USER' in potential_label:
+                mapped_field = 'nama'
+            elif 'CP' in potential_label or 'TELEGRAM' in potential_label or 'WA' in potential_label:
+                mapped_field = 'cp'
+            elif 'ALAMAT' in potential_label or 'WITEL' in potential_label:
+                mapped_field = 'alamat'
+            elif 'KENDALA' in potential_label or 'KETERANGAN' in potential_label:
+                mapped_field = 'kendala'
+                
+            if mapped_field:
+                current_key = mapped_field
+                accumulated_values[current_key].append(potential_val)
+                found_new_field = True
+                
+        if not found_new_field:
+            if current_key:
+                accumulated_values[current_key].append(line_str)
+                
+    for field in parsed:
+        parsed[field] = ' '.join(accumulated_values[field]).strip()
+        
+    return parsed
+
+
+def save_report_to_sheet(report_id, report_text, sender_id, username, sender_name, msg_timestamp):
+    """
+    Saves a report to the 'LAPORAN MPW' worksheet.
+    Parses the report text to extract fields if possible.
+    If the sheet is empty, initializes it with styled headers.
+    """
+    try:
+        ws = get_worksheet("LAPORAN MPW")
+        if ws is None:
+            raise Exception("Worksheet 'LAPORAN MPW' tidak ditemukan.")
+        
+        # Ambil semua data untuk menghitung baris
+        rows = ws.get_all_values()
+        
+        # Bersihkan whitespace
+        non_empty_rows = [r for r in rows if any(cell.strip() for cell in r)]
+        
+        headers = [
+            "No", "ID Laporan", "Tanggal Laporan", "Jam Laporan", "ID Pengirim", 
+            "Username", "Nama Pengirim", "Inet", "Nama Pelanggan", "CP Aktif WA", 
+            "Alamat", "Kendala", "Laporan Lengkap"
+        ]
+        
+        # Jika sheet kosong (belum ada headers atau isinya kosong sama sekali)
+        if not non_empty_rows:
+            ws.clear()
+            ws.insert_row(headers, 1)
+            try:
+                ws.format("A1:M1", {
+                    "textFormat": {"bold": True},
+                    "horizontalAlignment": "CENTER",
+                    "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
+                })
+                ws.freeze(rows=1)
+            except Exception as fe:
+                logging.warning(f"Gagal memformat header: {fe}")
+            next_no = 1
+        else:
+            # Jika headers tidak sama dengan format baru, bersihkan dan inisialisasi ulang
+            if len(non_empty_rows) == 1 and len(non_empty_rows[0]) != len(headers):
+                ws.clear()
+                ws.insert_row(headers, 1)
+                try:
+                    ws.format("A1:M1", {
+                        "textFormat": {"bold": True},
+                        "horizontalAlignment": "CENTER",
+                        "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
+                    })
+                    ws.freeze(rows=1)
+                except Exception as fe:
+                    logging.warning(f"Gagal memformat header: {fe}")
+                next_no = 1
+            else:
+                next_no = len(non_empty_rows)
+            
+        # Konversi timestamp ke WIB (UTC+7)
+        tz_wib = timezone(timedelta(hours=7))
+        dt_local = datetime.fromtimestamp(msg_timestamp, tz=timezone.utc).astimezone(tz_wib)
+        
+        date_str = dt_local.strftime("%Y-%m-%d")
+        time_str = dt_local.strftime("%H:%M:%S")
+        
+        # Parse fields from report_text
+        parsed_fields = parse_report_text(report_text)
+        
+        # Persiapkan data baru
+        new_row = [
+            next_no,
+            report_id,
+            date_str,
+            time_str,
+            str(sender_id),
+            f"@{username}" if username else "-",
+            sender_name or "-",
+            parsed_fields['inet'] or "-",
+            parsed_fields['nama'] or "-",
+            parsed_fields['cp'] or "-",
+            parsed_fields['alamat'] or "-",
+            parsed_fields['kendala'] or "-",
+            report_text
+        ]
+        
+        ws.append_row(new_row, value_input_option='USER_ENTERED')
+        logging.info(f"Berhasil menyimpan laporan {report_id} ke Google Sheet.")
+        return True
+    except Exception as e:
+        logging.error(f"Gagal menyimpan laporan ke Google Sheet: {e}")
+        raise e
+
+
+
+

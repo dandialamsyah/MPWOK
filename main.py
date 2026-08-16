@@ -9,7 +9,8 @@ import time
 from datetime import datetime, timezone, timedelta
 
 from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, TECH_TEAMS, PROV_TEAMS
-from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data
+from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data, save_report_to_sheet
+from telebot.formatting import escape_markdown
 
 # Daftar pesan penolakan kocak untuk non-admin
 FUNNY_REJECTIONS = [
@@ -54,6 +55,7 @@ try:
         telebot.types.BotCommand("urgentsta", "Memeriksa gangguan URGENT STA yang masih OPEN"),
         telebot.types.BotCommand("psb", "Melihat rekap data PSB berkala"),
         telebot.types.BotCommand("absen", "Mengirimkan pengingat absen TIM Assurance & TIM Provisioning"),
+        telebot.types.BotCommand("request", "Kirim laporan/request ke Google Sheets"),
         telebot.types.BotCommand("id", "Melihat ID chat saat ini")
     ])
     
@@ -403,6 +405,100 @@ def handle_absen(message):
     except Exception as e:
         logging.error(f"Gagal mengirim pengingat absen gabungan: {e}")
         safe_reply_to(message, f"❌ *Gagal mengirim pengingat absen:* {str(e)}")
+
+
+@bot.message_handler(func=lambda message: message.text and (
+    message.text.strip().startswith('/request') or 
+    ('FORMAT LAPORAN GANGGUAN MEMPAWAH' in message.text and '/request' in message.text)
+))
+def handle_request(message):
+    user_id = message.from_user.id if message.from_user else None
+    username = message.from_user.username if message.from_user else ""
+    first_name = message.from_user.first_name if message.from_user else ""
+    last_name = message.from_user.last_name if message.from_user else ""
+    sender_name = f"{first_name} {last_name}".strip() or "User"
+    
+    report_text = ""
+    msg_timestamp = message.date
+    
+    # 1. Cek apakah ini reply ke pesan lain
+    if message.reply_to_message:
+        original_text = message.reply_to_message.text or message.reply_to_message.caption or ""
+        if not original_text:
+            original_text = "[Pesan Media]"
+            
+        msg_timestamp = message.reply_to_message.date
+        
+        # Ambil tambahan teks jika ada di command request
+        command_text = ""
+        if message.text.strip().startswith('/request'):
+            parts = message.text.strip().split(maxsplit=1)
+            command_text = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            command_text = message.text.strip()
+            
+        if command_text:
+            report_text = f"{original_text}\n\n(Catatan Tambahan: {command_text})"
+        else:
+            report_text = original_text
+    else:
+        # 2. Jika bukan reply, gunakan seluruh isi pesan
+        report_text = message.text.strip()
+        
+    # Cek apakah setelah dibersihkan laporannya kosong
+    import re
+    cleaned_check = re.sub(r'(?i)/request', '', report_text).strip()
+    cleaned_check = re.sub(r'(?i)FORMAT\s+LAPORAN\s+GANGGUAN\s+MEMPAWAH', '', cleaned_check).strip()
+    
+    if not cleaned_check:
+        instructions = (
+            "❌ *Format request/laporan salah\\!*\n\n"
+            "Silakan gunakan salah satu cara berikut:\n"
+            "1\\. Balas/Reply pesan laporan dengan perintah `/request`\n"
+            "2\\. Kirim perintah beserta laporannya, contoh:\n"
+            "`/request Laporan gangguan Alpro Down...`\n\n"
+            "Atau gunakan format:\n"
+            "```\n"
+            "FORMAT LAPORAN GANGGUAN MEMPAWAH\n"
+            "/request\n"
+            "INET : [nomor inet]\n"
+            "NAMA : [nama pelanggan]\n"
+            "CP AKTIF WA : [no wa]\n"
+            "ALAMAT : [alamat]\n"
+            "KENDALA : [kendala]\n"
+            "```"
+        )
+        safe_reply_to(message, instructions, parse_mode="MarkdownV2")
+        return
+        
+    bot.send_chat_action(message.chat.id, 'typing')
+    
+    # Generate ID eskalasi acak 9 digit
+    id_num = random.randint(100000000, 999999999)
+    report_id = f"ID.{id_num}"
+    
+    try:
+        # Simpan ke Google Sheet
+        save_report_to_sheet(
+            report_id=report_id,
+            report_text=report_text,
+            sender_id=user_id,
+            username=username,
+            sender_name=sender_name,
+            msg_timestamp=msg_timestamp
+        )
+        
+        # Kirim balasan sukses sesuai permintaan user
+        response_msg = f"Request eskalasi berhasil dibuat dengan nomor {report_id}, laporan diterima, menunggu petugas"
+        safe_reply_to(message, response_msg, parse_mode=None)
+    except Exception as e:
+        logging.error(f"Gagal memproses request: {e}")
+        safe_reply_to(message, f"❌ *Gagal menyimpan laporan:* {escape_markdown(str(e))}", parse_mode="MarkdownV2")
+
+
+
+
+
 
 # ==================== CALLBACK QUERY HANDLER ====================
 
