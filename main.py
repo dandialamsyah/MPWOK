@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime, timezone, timedelta
 
-from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, TECH_TEAMS, PROV_TEAMS
+from config import BOT_TOKEN, GEMINI_KEY, GROUP_ID, GROUP_ID_STA, GROUP_ID_ABSEN, GROUP_ID_ABSEN_PROV, GROUP_ID_REQUEST, TECH_TEAMS, PROV_TEAMS
 from sheets_handler import fetch_open_tickets_alert, fetch_rekap_data, fetch_psb_data, get_open_tickets_data, save_report_to_sheet
 from telebot.formatting import escape_markdown
 
@@ -73,6 +73,15 @@ try:
             logging.info(f"Command menu untuk GROUP_ID_ABSEN_PROV ({GROUP_ID_ABSEN_PROV}) berhasil dihapus.")
         except Exception as e:
             logging.warning(f"Gagal menghapus command menu di GROUP_ID_ABSEN_PROV: {e}")
+            
+    if GROUP_ID_REQUEST:
+        try:
+            bot.set_my_commands([
+                telebot.types.BotCommand("request", "Kirim laporan/request ke Google Sheets")
+            ], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_REQUEST))
+            logging.info(f"Command menu untuk GROUP_ID_REQUEST ({GROUP_ID_REQUEST}) berhasil diatur.")
+        except Exception as e:
+            logging.warning(f"Gagal mengatur command menu di GROUP_ID_REQUEST: {e}")
 except Exception as e:
     logging.error(f"Gagal mengatur perintah bot: {e}")
 
@@ -299,6 +308,19 @@ def handle_absen_group_commands(message):
         bot.delete_message(message.chat.id, message.message_id)
     except Exception as e:
         logging.warning(f"Gagal menghapus pesan command di grup absen: {e}")
+    return
+
+
+# Handler untuk mengabaikan dan menghapus pesan command selain /request di grup request
+@bot.message_handler(func=lambda message: message.text and message.text.startswith('/') and 
+                    not message.text.split()[0].lower().startswith('/request') and
+                    (GROUP_ID_REQUEST and (message.chat.id == GROUP_ID_REQUEST or str(message.chat.id).endswith('868570227'))))
+def handle_request_group_other_commands(message):
+    logging.info(f"Mengabaikan command non-request '{message.text}' di grup request ({message.chat.id})")
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception as e:
+        logging.warning(f"Gagal menghapus command non-request di grup request: {e}")
     return
 
 @bot.message_handler(commands=['start', 'help'])

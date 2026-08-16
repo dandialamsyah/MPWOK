@@ -59,6 +59,7 @@ GROUP_ID = parse_group_id("GROUP_ID")
 GROUP_ID_STA = parse_group_id("GROUP_ID_STA")
 GROUP_ID_ABSEN = parse_group_id("GROUP_ID_ABSEN")
 GROUP_ID_ABSEN_PROV = parse_group_id("GROUP_ID_ABSEN_PROV")
+GROUP_ID_REQUEST = parse_group_id("GROUP_ID_REQUEST")
 
 # ==================== KATEGORI STATUS ====================
 KATEGORI_CLOSED = ['CLOSE', 'CLOSED']
