@@ -768,6 +768,18 @@ def parse_report_text(text):
         parsed[field] = ' '.join(accumulated_values[field]).strip()
         
     return parsed
+        
+def col_index_to_letter(col_idx):
+    """
+    Converts a 0-based column index to an Excel-style column letter.
+    E.g. 0 -> 'A', 25 -> 'Z', 26 -> 'AA', 27 -> 'AB'
+    """
+    letter = ""
+    col_idx += 1 # Convert to 1-based index
+    while col_idx > 0:
+        col_idx, remainder = divmod(col_idx - 1, 26)
+        letter = chr(65 + remainder) + letter
+    return letter
 
 
 def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_timestamp, chat_id, message_id):
@@ -838,7 +850,8 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
                 header_upper = [h.strip().upper() for h in rows[0]] if rows else [h.strip().upper() for h in headers]
                 if "INET" in header_upper and "STATUS" in header_upper and "ID LAPORAN" in header_upper:
                     idx_inet = header_upper.index("INET")
-                    idx_status = header_upper.index("STATUS")
+                    # Cari status kolom paling kanan (manually created status column)
+                    idx_status = len(header_upper) - 1 - header_upper[::-1].index("STATUS")
                     idx_id = header_upper.index("ID LAPORAN")
                     
                     # Periksa semua baris data yang ada
@@ -865,28 +878,58 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
         date_str = dt_local.strftime("%Y-%m-%d")
         time_str = dt_local.strftime("%H:%M:%S")
         
-        # Persiapkan data baru
-        new_row = [
-            next_no,
-            report_id,
-            date_str,
-            time_str,
-            str(sender_id),
-            f"@{username}" if username else "-",
-            sender_name or "-",
-            new_inet or "-",
-            parsed_fields['nama'] or "-",
-            parsed_fields['cp'] or "-",
-            parsed_fields['alamat'] or "-",
-            parsed_fields['kendala'] or "-",
-            report_text,
-            "OPEN", # status awal
-            str(chat_id),
-            str(message_id),
-            "-" # notifikasi close belum terkirim
-        ]
+        # Dapatkan header dari sheet atau gunakan default jika kosong
+        sheet_header = rows[0] if rows else headers
+        new_row = [""] * len(sheet_header)
+        
+        sheet_header_upper = [h.strip().upper() for h in sheet_header]
+        
+        def set_val(label, val):
+            if label.upper() in sheet_header_upper:
+                # Find the first occurrence (or last if it is status, handled separately below)
+                idx = sheet_header_upper.index(label.upper())
+                new_row[idx] = val
+                
+        # Khusus untuk "STATUS" yang mungkin ada dua (N dan R), kita set nilai di semua kolom status
+        for idx, h in enumerate(sheet_header_upper):
+            if h == "STATUS":
+                new_row[idx] = "OPEN"
+                
+        set_val("NO", next_no)
+        set_val("ID LAPORAN", report_id)
+        set_val("TANGGAL LAPORAN", date_str)
+        set_val("JAM LAPORAN", time_str)
+        set_val("ID PENGIRIM", str(sender_id))
+        set_val("USERNAME", f"@{username}" if username else "-")
+        set_val("NAMA PENGIRIM", sender_name or "-")
+        set_val("INET", new_inet or "-")
+        set_val("NAMA PELANGGAN", parsed_fields['nama'] or "-")
+        set_val("CP AKTIF WA", parsed_fields['cp'] or "-")
+        set_val("ALAMAT", parsed_fields['alamat'] or "-")
+        set_val("KENDALA", parsed_fields['kendala'] or "-")
+        set_val("LAPORAN LENGKAP", report_text)
+        set_val("CHAT ID", str(chat_id))
+        set_val("MESSAGE ID", str(message_id))
+        set_val("NOTIFIKASI CLOSE", "-")
         
         ws.append_row(new_row, value_input_option='USER_ENTERED')
+        
+        # Tambahkan data validation dropdown list (OPEN/CLOSE) untuk kolom status paling kanan
+        idx_status_val = len(sheet_header_upper) - 1 - sheet_header_upper[::-1].index("STATUS") if "STATUS" in sheet_header_upper else -1
+        if idx_status_val != -1:
+            try:
+                from gspread.utils import ValidationConditionType
+                status_letter = col_index_to_letter(idx_status_val)
+                ws.add_validation(
+                    f"{status_letter}2:{status_letter}1000",
+                    ValidationConditionType.one_of_list,
+                    ["OPEN", "CLOSE"],
+                    showCustomUi=True
+                )
+                logging.info(f"Berhasil menerapkan data validation dropdown di kolom {status_letter}.")
+            except Exception as ve_err:
+                logging.warning(f"Gagal menambahkan data validation dropdown: {ve_err}")
+                
         logging.info(f"Berhasil menyimpan laporan {report_id} ke Google Sheet.")
         return report_id
     except Exception as e:
