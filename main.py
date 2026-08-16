@@ -78,17 +78,13 @@ try:
             
     if GROUP_ID_REQUEST:
         try:
-            # Set commands for regular members in the request group
-            bot.set_my_commands([
-                telebot.types.BotCommand("request", "Kirim laporan/request ke Google Sheets")
-            ], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_REQUEST))
-            # Also set commands for administrators in the request group
-            bot.set_my_commands([
-                telebot.types.BotCommand("request", "Kirim laporan/request ke Google Sheets")
-            ], scope=telebot.types.BotCommandScopeChatAdministrators(chat_id=GROUP_ID_REQUEST))
-            logging.info(f"Command menu untuk GROUP_ID_REQUEST ({GROUP_ID_REQUEST}) berhasil diatur (member & admin).")
+            # Hapus commands menu untuk regular members di request group
+            bot.set_my_commands([], scope=telebot.types.BotCommandScopeChat(chat_id=GROUP_ID_REQUEST))
+            # Hapus commands menu untuk administrators di request group
+            bot.set_my_commands([], scope=telebot.types.BotCommandScopeChatAdministrators(chat_id=GROUP_ID_REQUEST))
+            logging.info(f"Command menu untuk GROUP_ID_REQUEST ({GROUP_ID_REQUEST}) berhasil diatur ke KOSONG (member & admin).")
         except Exception as e:
-            logging.warning(f"Gagal mengatur command menu di GROUP_ID_REQUEST: {e}")
+            logging.warning(f"Gagal mengatur command menu kosong di GROUP_ID_REQUEST: {e}")
 except Exception as e:
     logging.error(f"Gagal mengatur perintah bot: {e}")
 
