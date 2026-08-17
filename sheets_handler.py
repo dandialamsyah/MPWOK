@@ -126,6 +126,88 @@ def resolve_jam_open(header):
 # Setup Google Sheets
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 ws_cache = {}
+_cf_checked = False
+
+def migrate_laporan_mpw_sheet(ws):
+    try:
+        rows = ws.get_all_values()
+        if not rows:
+            return
+        headers = [h.strip().upper() for h in rows[0]]
+        if "WILAYAH" not in headers:
+            logging.info("Migrasi Sheet: Menambahkan kolom 'Wilayah' ke worksheet...")
+            # Kita sisipkan kolom 'Wilayah' di kolom ke-13 (indeks 1-based 13, yaitu kolom M)
+            # Laporan Lengkap sebelumnya ada di kolom 13.
+            # Jadi kita sisipkan sebelum Laporan Lengkap.
+            values = [["Wilayah"] + [""] * (len(rows) - 1)]
+            ws.insert_cols(values, col=13, value_input_option='USER_ENTERED')
+            logging.info("Migrasi Sheet: Kolom 'Wilayah' berhasil disisipkan.")
+            
+            global _cf_checked
+            _cf_checked = False
+    except Exception as e:
+        logging.error(f"Gagal melakukan migrasi worksheet: {e}")
+
+def ensure_conditional_formatting(ws):
+    try:
+        sh = ws.spreadsheet
+        metadata = sh.fetch_sheet_metadata()
+        ws_meta = None
+        for sheet in metadata.get('sheets', []):
+            if sheet.get('properties', {}).get('title') == ws.title:
+                ws_meta = sheet
+                break
+        
+        has_rule = False
+        if ws_meta:
+            existing_rules = ws_meta.get('conditionalFormats', [])
+            for rule in existing_rules:
+                condition = rule.get('booleanRule', {}).get('condition', {})
+                values = condition.get('values', [])
+                if values and '=AND($O2="CLOSE"; $R2="YA")' in [v.get('userEnteredValue') for v in values]:
+                    has_rule = True
+                    break
+        
+        if not has_rule:
+            logging.info("Menambahkan conditional formatting rule untuk status CLOSE dan notifikasi YA...")
+            requests = [
+                {
+                    "addConditionalFormatRule": {
+                        "rule": {
+                            "ranges": [
+                                {
+                                    "sheetId": ws.id,
+                                    "startRowIndex": 1,      # Mulai baris 2 (0-indexed 1)
+                                    "startColumnIndex": 0,   # Kolom A
+                                    "endColumnIndex": 18     # Kolom R (eksklusif)
+                                }
+                            ],
+                            "booleanRule": {
+                                "condition": {
+                                    "type": "CUSTOM_FORMULA",
+                                    "values": [
+                                        {"userEnteredValue": '=AND($O2="CLOSE"; $R2="YA")'}
+                                    ]
+                                },
+                                "format": {
+                                    "backgroundColor": {
+                                        "red": 0.85,
+                                        "green": 0.95,
+                                        "blue": 0.85
+                                    }
+                                }
+                            }
+                        },
+                        "index": 0
+                    }
+                }
+            ]
+            sh.batch_update({"requests": requests})
+            logging.info("Conditional formatting rule berhasil ditambahkan.")
+        else:
+            logging.info("Conditional formatting rule untuk status CLOSE dan notifikasi YA sudah aktif.")
+    except Exception as e:
+        logging.warning(f"Gagal memastikan conditional formatting: {e}")
 
 def get_worksheet(sheet_name=None):
     global ws_cache
@@ -181,6 +263,13 @@ def get_worksheet(sheet_name=None):
         else:
             ws = sh.sheet1
         ws_cache[cache_key] = ws
+        
+        global _cf_checked
+        if not _cf_checked and (sheet_name == "LAPORAN MPW" or (sheet_name is None and ws.title == "LAPORAN MPW")):
+            migrate_laporan_mpw_sheet(ws)
+            ensure_conditional_formatting(ws)
+            _cf_checked = True
+            
         return ws
     except Exception as e:
         logging.error(f"Gagal inisialisasi Google Sheets ({cache_key}): {e}")
@@ -719,7 +808,8 @@ def parse_report_text(text):
         'nama': '',
         'cp': '',
         'alamat': '',
-        'kendala': ''
+        'kendala': '',
+        'wilayah': ''
     }
     
     lines = cleaned.split('\n')
@@ -729,7 +819,8 @@ def parse_report_text(text):
         'nama': [],
         'cp': [],
         'alamat': [],
-        'kendala': []
+        'kendala': [],
+        'wilayah': []
     }
     
     for line in lines:
@@ -754,6 +845,8 @@ def parse_report_text(text):
                 mapped_field = 'alamat'
             elif 'KENDALA' in potential_label or 'KETERANGAN' in potential_label:
                 mapped_field = 'kendala'
+            elif 'WILAYAH' in potential_label or 'SEKTOR' in potential_label:
+                mapped_field = 'wilayah'
                 
             if mapped_field:
                 current_key = mapped_field
@@ -767,6 +860,17 @@ def parse_report_text(text):
     for field in parsed:
         parsed[field] = ' '.join(accumulated_values[field]).strip()
         
+    # Auto-detection fallback if wilayah is empty or "-"
+    if not parsed['wilayah'] or parsed['wilayah'] == '-':
+        text_upper = cleaned.upper()
+        has_sta = bool(re.search(r'\b(STA|SIANTAN)\b', text_upper))
+        has_mpw = bool(re.search(r'\b(MPW|MEMPAWAH)\b', text_upper))
+        
+        if has_sta and not has_mpw:
+            parsed['wilayah'] = 'STA'
+        elif has_mpw and not has_sta:
+            parsed['wilayah'] = 'MPW'
+            
     return parsed
         
 def col_index_to_letter(col_idx):
@@ -804,7 +908,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
         headers = [
             "No", "ID Laporan", "Tanggal Laporan", "Jam Laporan", "ID Pengirim", 
             "Username", "Nama Pengirim", "Inet", "Nama Pelanggan", "CP Aktif WA", 
-            "Alamat", "Kendala", "Laporan Lengkap", "status", "Chat ID", "Message ID", "Notifikasi Close"
+            "Alamat", "Kendala", "Wilayah", "Laporan Lengkap", "status", "Chat ID", "Message ID", "Notifikasi Close"
         ]
         
         # Jika sheet kosong (belum ada headers atau isinya kosong sama sekali)
@@ -812,7 +916,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
             ws.clear()
             ws.insert_row(headers, 1)
             try:
-                ws.format("A1:Q1", {
+                ws.format("A1:R1", {
                     "textFormat": {"bold": True},
                     "horizontalAlignment": "CENTER",
                     "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
@@ -827,7 +931,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
                 ws.clear()
                 ws.insert_row(headers, 1)
                 try:
-                    ws.format("A1:Q1", {
+                    ws.format("A1:R1", {
                         "textFormat": {"bold": True},
                         "horizontalAlignment": "CENTER",
                         "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
@@ -907,6 +1011,7 @@ def save_report_to_sheet(report_text, sender_id, username, sender_name, msg_time
         set_val("CP AKTIF WA", parsed_fields['cp'] or "-")
         set_val("ALAMAT", parsed_fields['alamat'] or "-")
         set_val("KENDALA", parsed_fields['kendala'] or "-")
+        set_val("WILAYAH", parsed_fields['wilayah'] or "-")
         set_val("LAPORAN LENGKAP", report_text)
         set_val("CHAT ID", str(chat_id))
         set_val("MESSAGE ID", str(message_id))

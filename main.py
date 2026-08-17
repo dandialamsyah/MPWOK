@@ -519,9 +519,29 @@ def handle_request(message):
             "CP AKTIF WA : [no wa]\n"
             "ALAMAT : [alamat]\n"
             "KENDALA : [kendala]\n"
+            "SEKTOR : STA atau MPW\n"
             "```"
         )
         safe_reply_to(message, instructions, parse_mode="MarkdownV2")
+        return
+    from sheets_handler import parse_report_text
+    parsed_check = parse_report_text(report_text)
+    wilayah_val = parsed_check.get('wilayah', '').strip().upper()
+    
+    # Bersihkan jika ada penjelasan dalam tanda kurung
+    wilayah_clean = re.sub(r'\(.*?\)', '', wilayah_val).strip()
+    valid_wilayah = ['STA', 'MPW', 'SIANTAN', 'MEMPAWAH']
+    
+    if not wilayah_clean or wilayah_clean not in valid_wilayah:
+        err_msg = (
+            "❌ *Laporan ditolak: Sektor/Wilayah gangguan belum ditentukan atau tidak valid\\!*\n\n"
+            "Mohon tentukan wilayah gangguan:\n"
+            "\\- *STA* \\(Siantan\\)\n"
+            "\\- *MPW* \\(Mempawah\\)\n\n"
+            "Silakan kirim ulang laporan lengkap dengan mencantumkan `SEKTOR : STA` atau `SEKTOR : MPW`\\."
+        )
+        target_msg = message.reply_to_message if message.reply_to_message else message
+        safe_reply_to(target_msg, err_msg, parse_mode="MarkdownV2")
         return
         
     bot.send_chat_action(message.chat.id, 'typing')
@@ -788,6 +808,7 @@ def run_scheduler():
                     f"✅ *Laporan diselesaikan / CLOSE*\n\n"
                     f"• Nomor Laporan: `{r_id}`\n"
                     f"• Nomor Internet: `{inet}`\n\n"
+                    f"note : done perbaikan silahkan di cek kembali\n\n"
                     f"Terima kasih atas kerja samanya, laporan telah ditutup oleh petugas\\."
                 )
                 
