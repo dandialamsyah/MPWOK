@@ -524,6 +524,7 @@ def handle_request(message):
         )
         safe_reply_to(message, instructions, parse_mode="MarkdownV2")
         return
+    # Cek apakah Sektor/Wilayah ditentukan dan valid
     from sheets_handler import parse_report_text
     parsed_check = parse_report_text(report_text)
     wilayah_val = parsed_check.get('wilayah', '').strip().upper()
